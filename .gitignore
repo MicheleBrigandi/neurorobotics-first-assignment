@@ -1,0 +1,19 @@
+# MATLAB & System Junk
+*.asv
+*.autosave
+.DS_Store
+Thumbs.db
+
+# MATLAB Project Files
+*.prj
+resources/
+
+# Large Data & Output Folders
+data/
+results/
+
+# Large File Types
+*.gdf
+*.mat
+
+!data/laplacian16.mat
