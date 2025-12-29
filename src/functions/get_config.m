@@ -1,51 +1,33 @@
 function cfg = get_config()
 % GET_CONFIG Returns the global configuration structure for the BCI pipeline.
 %
-% This function centralises all parameters used for signal processing,
-% feature extraction, and classification. It ensures consistency across
-% different scripts (preprocessing, training, and testing).
+% This function centralises all constant parameters used for signal processing,
+% feature extraction, and classification. 
 %
 % OUTPUT:
-%   cfg - Struct containing paths, file names, and algorithm parameters.
+%   cfg - Struct containing paths, constants, and algorithm parameters.
 %
 % USAGE:
 %   cfg = get_config();
 
-    %% DIRECTORY STRUCTURE
-
+    %% DIRECTORY STRUCTURE (Roots)
     cfg.paths.root           = pwd;
     cfg.paths.data           = fullfile(cfg.paths.root, 'data');
     cfg.paths.downloads      = fullfile(cfg.paths.data, 'downloads');
-    cfg.paths.raw_offline    = fullfile(cfg.paths.data, 'raw', 'offline');
-    cfg.paths.raw_online     = fullfile(cfg.paths.data, 'raw', 'online');
+    
+    % Root folder for organised raw data (containing subject subfolders)
+    cfg.paths.raw_root       = fullfile(cfg.paths.data, 'raw');
+    
+    % Root folders for outputs
     cfg.paths.data_processed = fullfile(cfg.paths.data, 'processed');
     cfg.paths.results        = fullfile(cfg.paths.root, 'results');
 
     %% FILE REGISTRY
+    % Only include files that are common to all subjects
     
-    % External Resources / Dependencies
-    % The spatial Laplacian filter mask (provided with the dataset).
+    % The spatial Laplacian filter mask (provided with the dataset)
     cfg.files.laplacian = fullfile(cfg.paths.data, 'laplacian16.mat');
     
-    % Intermediate Pipeline Files (Processed Data)
-    % Concatenated raw data
-    cfg.files.concat_offline = fullfile(cfg.paths.data_processed, 'concat_gdf_offline.mat');
-    cfg.files.concat_online  = fullfile(cfg.paths.data_processed, 'concat_gdf_online.mat');
-    
-    % Power Spectral Density (PSD)
-    cfg.files.psd_offline    = fullfile(cfg.paths.data_processed, 'eeg_psd_offline.mat');
-    cfg.files.psd_online     = fullfile(cfg.paths.data_processed, 'eeg_psd_online.mat');
-    
-    % Segmented Trials (Activity Matrix)
-    cfg.files.activity_offline = fullfile(cfg.paths.data_processed, 'activity_offline.mat');
-    cfg.files.activity_online  = fullfile(cfg.paths.data_processed, 'activity_online.mat');
-    
-    % Output Results
-    % Fisher Score ranking and indices
-    cfg.files.fisher_results = fullfile(cfg.paths.results, 'fisher_results.mat');
-    % The trained LDA classifier model
-    cfg.files.model          = fullfile(cfg.paths.results, 'classifier_model.mat');
-
     %% ACQUISITION PARAMETERS
     % Sampling rate in Hz.
     % Note: The g.USBamp amplifier used in the experiment is set to 512 Hz
@@ -54,7 +36,7 @@ function cfg = get_config()
     % Number of EEG channels acquired (10-20 international system)
     cfg.n_channels = 16;
     
-    %% SIGNAL PROCESSING (Spectrogram)
+    %% SIGNAL PROCESSING (Spectrogram / PSD)
     % These parameters define how the Power Spectral Density (PSD) is computed
     
     % Window length for the spectrogram (in seconds)
@@ -71,10 +53,12 @@ function cfg = get_config()
     cfg.spec.mlength = 1;
     
     % Frequency band of interest (in Hz)
+    % We filter out very low/high freqs to save space and focus on Mu/Beta
     cfg.spec.freq_band = [4 48];
     
     %% EVENT CODES (GDF Standard)
-
+    % Hex codes converted to decimal
+    cfg.codes.fix      = 786; % 0x0312: Fixation Cross
     cfg.codes.hands    = 773; % 0x0305: Cue - Both Hands
     cfg.codes.feet     = 771; % 0x0303: Cue - Both Feet
     cfg.codes.feedback = 781; % 0x030D: Continuous Feedback Start
@@ -84,5 +68,5 @@ function cfg = get_config()
     
     % Number of top discriminative features (Frequency-Channel pairs) to select
     % using the Fisher Score algorithm
-    cfg.train.n_features = 30;
+    cfg.train.n_features = 10; 
 end

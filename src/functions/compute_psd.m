@@ -1,121 +1,104 @@
-function compute_psd(input_filepath, output_filepath)
-% COMPUTE_PSD Computes the Power Spectral Density (PSD) for EEG data.
+function compute_psd(input_dir, output_dir, laplacian_path, cfg)
+% COMPUTE_PSD Computes Power Spectral Density (PSD) for single EEG runs.
 %
-% This function loads concatenated EEG data, applies a spatial Laplacian
-% filter, computes the spectrogram using a sliding window approach, and
-% extracts the relevant frequency bands. It also realigns the event markers
-% to match the new time windows.
+% This function iterates over raw .mat files, applies a spatial Laplacian 
+% filter, computes the spectrogram, and saves the resulting features (PSD) 
+% into new .mat files.
 %
 % INPUTS:
-%   input_filepath  - Path to the .mat file containing concatenated raw data
-%                     (must contain 'all_data', 'all_TYP', 'all_POS', 'all_DUR').
-%   output_filepath - Path where the processed PSD data will be saved.
+%   input_dir      - Folder containing raw .mat files.
+%   output_dir     - Folder where processed PSD files will be saved.
+%   laplacian_path - Path to the file containing Laplacian mask.
+%   cfg            - Config struct with spectrogram parameters (.spec).
 %
-% USAGE:
-%   compute_psd(cfg.files.concat_offline, cfg.files.psd_offline);
+% OUTPUTS:
+%   None. Files are saved to disk with the following variables:
+%     - PSD:      [Windows x Freqs x Channels] Power Spectral Density matrix.
+%     - freqs:    [Freqs x 1] Vector of frequency bins.
+%     - Events:   Struct (TYP, POS, DUR) aligned to spectrogram windows.
+%     - chanlabs: Cell array of channel labels.
+%     - cfg:      Configuration used for processing.
 
-    %% Configuration
-    % Load the central configuration if available.
-    if evalin('base', 'exist(''cfg'',''var'')')
-        cfg = evalin('base', 'cfg');
-    else
-        cfg = get_config();
+    %% Input Validation
+    if ~exist(output_dir, 'dir') 
+        mkdir(output_dir); 
     end
     
-    fprintf('Starting PSD computation for: %s\n', input_filepath);
-
-    %% Data Loading
-    % Load the concatenated EEG data
-    if ~exist(input_filepath, 'file')
-        error('Input file not found: %s', input_filepath);
+    if ~exist(laplacian_path, 'file')
+        error('[compute_psd] Laplacian file not found: %s\n', laplacian_path);
     end
-    data_struct = load(input_filepath);
-    
-    % Extract variables
-    if isfield(data_struct, 'all_data')
-        raw_data = data_struct.all_data;
-        events.TYP = data_struct.all_TYP;
-        events.POS = data_struct.all_POS;
-        events.DUR = data_struct.all_DUR;
-    else
-        error('The input file does not contain the required variable "all_data".');
-    end
+    load(laplacian_path, 'lap'); 
 
-    %% Spatial Filtering (Laplacian)
-    % Load the Laplacian mask
-    if ~exist(cfg.files.laplacian, 'file')
-        error('Laplacian filter file not found at: %s', cfg.files.laplacian);
+    files = dir(fullfile(input_dir, '*.mat'));
+    if isempty(files)
+        warning('[compute_psd] No .mat files found in %s\n', input_dir);
+        return;
     end
-    load(cfg.files.laplacian, 'lap');
     
-    % Select only the first 16 channels
-    % Ensure data dimensions match the filter
-    n_channels = size(lap, 1);
-    s_raw = raw_data(:, 1:n_channels);
-    
-    % Apply the spatial filter
-    fprintf('Applying Laplacian spatial filter...\n');
-    s_lap = s_raw * lap;
+    fprintf('[compute_psd] Found %d files. Starting PSD computation...\n', length(files));
 
-    %% Spectrogram Computation
-    % Compute the spectrogram using the parameters from get_config
-    fprintf('Computing spectrogram...\n');
+    %% Processing Loop
+    for i = 1:length(files)
+        filename = files(i).name;
+        full_path = fullfile(input_dir, filename);
+        
+        fprintf('[compute_psd] Processing: %s ...\n', filename);
+        
+        try
+            % Load raw data
+            tmp = load(full_path); 
             
-    % Note: proc_spectrogram is an external function provided in the repo
-    [PSD_full, f_full] = proc_spectrogram(s_lap, ...
-                                          cfg.spec.wlength, ...
-                                          cfg.spec.wshift, ...
-                                          cfg.spec.pshift, ...
-                                          cfg.fs, ...
-                                          cfg.spec.mlength);
+            % Spatial filtering
+            n_lap_channels = size(lap, 1);
+            if size(tmp.data, 2) < n_lap_channels
+                warning('Skipping %s: Not enough channels.\n', filename);
+                continue;
+            end
+            
+            s_eeg = tmp.data(:, 1:n_lap_channels); 
+            s_lap = s_eeg * lap;
+            
+            % Copy labels
+            if isfield(tmp, 'chanlabs')
+                chanlabs = tmp.chanlabs(1:n_lap_channels);
+            else
+                chanlabs = {}; 
+            end
 
-    %% Feature Selection
-    % Select only the frequencies within the band of interest
-    freq_min = cfg.spec.freq_band(1);
-    freq_max = cfg.spec.freq_band(2);
-    
-    % Find indices corresponding to the desired range.
-    freq_idx = find(f_full >= freq_min & f_full <= freq_max);
-    
-    if isempty(freq_idx)
-        warning('No frequencies found in the range [%d, %d] Hz.', freq_min, freq_max);
+            % Spectrogram
+            [PSD_full, f_full] = proc_spectrogram(s_lap, ...
+                                        cfg.spec.wlength, ...
+                                        cfg.spec.wshift, ...
+                                        cfg.spec.pshift, ...
+                                        tmp.fs, ...
+                                        cfg.spec.mlength);
+            
+            % Feature selection
+            freq_idx = f_full >= cfg.spec.freq_band(1) & f_full <= cfg.spec.freq_band(2);
+            
+            PSD = PSD_full(:, freq_idx, :);
+            freqs = f_full(freq_idx);        
+            
+            % Event realignment
+            wshift_samples  = cfg.spec.wshift * tmp.fs;
+            wlength_samples = cfg.spec.wlength * tmp.fs;
+            winconv = 'backward'; 
+            
+            Events.POS = proc_pos2win(tmp.events.POS, wshift_samples, winconv, wlength_samples);
+            Events.DUR = ceil(tmp.events.DUR / wshift_samples);
+            Events.TYP = tmp.events.TYP;
+            
+            % Save processed data
+            [~, name_no_ext, ~] = fileparts(filename);
+            out_name = fullfile(output_dir, [name_no_ext '.mat']);
+            
+            % Save variables
+            save(out_name, 'PSD', 'freqs', 'Events', 'chanlabs', 'cfg');
+            
+        catch ME
+            fprintf('[compute_psd] Error processing %s: %s\n', filename, ME.message);
+        end
     end
-    
-    % Extract the subset of the PSD matrix
-    PSD_selected = PSD_full(:, freq_idx, :);
-    f_selected = f_full(freq_idx);
-    
-    fprintf('Selected %d frequency bins between %d Hz and %d Hz.\n', ...
-            length(f_selected), freq_min, freq_max);
 
-    %% Event Realignment
-    % The spectrogram reduces the temporal resolution. We must convert event
-    % positions (in samples) to window indices
-    fprintf('Realigning events to windowed time frame...\n');
-    
-    win_conv_direction = 'backward';
-    win_scale = cfg.spec.wshift * cfg.fs;   % Window shift in samples
-    win_len = cfg.spec.wlength * cfg.fs;    % Window length in samples
-    
-    % Convert POS and DUR using the provided helper function
-    POS_win = proc_pos2win(events.POS, win_scale, win_conv_direction, win_len);
-    DUR_win = proc_pos2win(events.DUR, win_scale, win_conv_direction, win_len);
-    
-    % Update the event structure
-    events_win.TYP = events.TYP;
-    events_win.POS = POS_win;
-    events_win.DUR = DUR_win;
-
-    %% Saving Results
-    % Create output directory if needed
-    output_dir = fileparts(output_filepath);
-    if ~exist(output_dir, 'dir')
-        mkdir(output_dir);
-    end
-    
-    % Save all necessary variables
-    save(output_filepath, 'PSD_selected', 'f_selected', 'events_win', 'cfg');
-    
-    fprintf('Processed PSD data saved to %s\n', output_filepath);
+    fprintf('[compute_psd] PSD computation completed.\n');
 end
-

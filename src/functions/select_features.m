@@ -1,90 +1,133 @@
-function select_features(input_filepath, output_filepath)
-% SELECT_FEATURES Computes Fisher Score to select the most discriminative features.
+function select_features(input_filepath, output_filepath, cfg)
+% SELECT_FEATURES Computes Fisher Score to select discriminative features.
 %
-% This function loads the segmented 'Activity' data, flattens the temporal
-% dimension (averaging over time), and calculates the Fisher Score for each
-% Frequency-Channel pair. It then selects the top K features defined in the
-% configuration.
+% This function loads the 'Activity' data, slices it to keep only the 
+% active phase (from Cue onset), computes the Fisher Score between the two 
+% classes defined in cfg, and selects the top-K features.
 %
 % INPUTS:
-%   input_filepath  - Path to the .mat file containing 'Activity' and labels.
-%   output_filepath - Path where the ranking and selected indices will be saved.
+%   input_filepath  - Path to the .mat file.
+%   output_filepath - Path where results will be saved.
+%   cfg             - Configuration struct (containing .codes and .train).
 %
 % USAGE:
-%   select_features(cfg.files.activity_offline, cfg.files.fisher_results);
+%   select_features(path_in, path_out, cfg);
 
-    %% Configuration
-    if evalin('base', 'exist(''cfg'',''var'')')
-        cfg = evalin('base', 'cfg');
-    else
-        cfg = get_config();
+    %% Input Validation
+    if nargin < 3
+        error('[select_features] Error: Not enough input arguments.');
     end
-
-    fprintf('Starting Feature Selection...\n');
     
     if ~exist(input_filepath, 'file')
-        error('Input file not found: %s', input_filepath);
+        error('[select_features] Input file not found: %s', input_filepath);
     end
-    load(input_filepath, 'Activity', 'mi_class_events');
-
-    %% Feature Extraction
-    % We average over the time samples to get a single power value per freq/chan.
     
-    % Squeeze removes the singleton dimension (Samples) after averaging
-    % feat_FC_T: [Freq x Chan x Trials]
-    feat_FC_T = squeeze(mean(Activity, 1, 'omitnan')); 
-    
-    [n_freq, n_chan, n_trials] = size(feat_FC_T);
-    n_features = n_freq * n_chan;
+    % Extract parameters from config
+    try
+        class_A = cfg.codes.hands;
+        class_B = cfg.codes.feet;
+        
+        if isfield(cfg, 'train') && isfield(cfg.train, 'n_features')
+            n_features = cfg.train.n_features;
+        else
+            n_features = 10;
+            warning('[select_features] cfg.train.n_features not found. Using default: 10');
+        end
+    catch
+        error('[select_features] Invalid cfg structure. Ensure .codes.hands and .codes.feet exist.');
+    end
 
-    % Flatten (Freq x Chan) into a single feature vector D per trial
-    % X: [Trials x (Freq*Chan)]
-    X = reshape(permute(feat_FC_T, [3 1 2]), n_trials, n_features);
+    fprintf('[select_features] Loading: %s\n', input_filepath);
+    
+    % Load data
+    data_in = load(input_filepath);
+    
+    % Check for required variables
+    required_vars = {'Activity', 'all_trials_labels', 'all_cue_onsets', 'freqs', 'chanlabs'};
+    for v = 1:length(required_vars)
+        if ~isfield(data_in, required_vars{v})
+            error('[select_features] Missing variable "%s" in input file.', required_vars{v});
+        end
+    end
+    
+    Activity = data_in.Activity;
+    labels   = data_in.all_trials_labels;
+    onsets   = data_in.all_cue_onsets;
+    freqs    = data_in.freqs;
+    chanlabs = data_in.chanlabs;
+
+    %% Feature Extraction 
+    
+    fprintf('[select_features] Extracting active phase and averaging...\n');
+    
+    [~, n_freq, n_chan, n_trials] = size(Activity);
+    
+    % Initialize feature matrix: [Trials x Freq x Chan]
+    feat_FC_T = zeros(n_freq, n_chan, n_trials);
+    
+    for t = 1:n_trials
+        % Start from cue
+        t_start = onsets(t);
+        
+        % Slice active data
+        trial_active = Activity(t_start:end, :, :, t);
+        
+        % Average over time
+        feat_FC_T(:, :, t) = squeeze(mean(trial_active, 1, 'omitnan'));
+    end
+    
+    % Flatten for Fisher calculation: [Trials x (Freq*Chan)]
+    n_total_features = n_freq * n_chan;
+    X = reshape(permute(feat_FC_T, [3 1 2]), n_trials, n_total_features);
 
     %% Compute Fisher Score
-    % Get class codes from config
-    class_A = cfg.codes.hands;
-    class_B = cfg.codes.feet;
+    fprintf('[select_features] Calculating Fisher Score...\n');
     
-    fprintf('Calculating Fisher Scores for %d features...\n', n_features);
-    scores = calculate_fisher_score(X, mi_class_events, class_A, class_B);
+    scores = calculate_fisher_score(X, labels, class_A, class_B);
+    
+    % Handle potential NaNs
+    scores(isnan(scores)) = 0;
 
-    %% Feature Selection (Top K)
-    top_k = cfg.train.n_features;
-    
-    % Sort scores in descending order
+    %% Select Top-K Features
     [sorted_scores, sort_idx] = sort(scores, 'descend');
     
-    % Select the indices of the best features
-    best_features_idx = sort_idx(1:top_k);
+    % Select indices
+    best_features_idx = sort_idx(1:min(n_features, length(scores)));
     
-    % Map the linear index back to [Frequency, Channel] pairs
+    % Map back to [Frequency, Channel] indices
     selected_freq_idx = mod(best_features_idx - 1, n_freq) + 1;
     selected_chan_idx = floor((best_features_idx - 1) / n_freq) + 1;
-
-    % Load frequency vector for reference
-    if exist(cfg.files.psd_offline, 'file')
-        tmp = load(cfg.files.psd_offline, 'f_selected');
-        selected_freqs_hz = tmp.f_selected(selected_freq_idx);
-    else
-        selected_freqs_hz = [];
-    end
 
     %% Visualization
     fisher_map = reshape(scores, n_freq, n_chan);
     
-    figure('Name', 'Fisher Score Analysis', 'Color', 'w');
-    imagesc(fisher_map');
-    colorbar;
-    title('Fisher Score Feature Importance');
-    xlabel('Frequency Bin Index');
-    ylabel('Channel Index');
-    axis xy;
+    figure('Name', 'Fisher Score Analysis', 'Color', 'w', 'NumberTitle', 'off');
     
-    fprintf('Visualisation created. High values indicate discriminative features.\n');
+    % Plot Heatmap (Channels on Y, Frequencies on X)
+    imagesc(fisher_map'); 
+    colorbar;
+    
+    % X-Axis: Frequencies
+    num_xticks = 10;
+    xticks_idx = round(linspace(1, n_freq, num_xticks));
+    xticks(xticks_idx);
+    xticklabels(arrayfun(@(x) sprintf('%.1f', x), freqs(xticks_idx), 'UniformOutput', false));
+    xlabel('Frequency (Hz)');
+    
+    % Y-Axis: Channels
+    if ~isempty(chanlabs)
+        yticks(1:n_chan);
+        yticklabels(chanlabs);
+    else
+        ylabel('Channel Index');
+    end
+    
+    title(sprintf('Fisher Score: Class %d vs %d', class_A, class_B));
+    axis xy; 
+    
+    fprintf('[select_features] Visualization created.\n');
 
     %% Saving Results
-    % Create output directory if needed
     output_dir = fileparts(output_filepath);
     if ~exist(output_dir, 'dir'), mkdir(output_dir); end
     
@@ -94,32 +137,37 @@ function select_features(input_filepath, output_filepath)
          'selected_chan_idx', ... 
          'fisher_map', ...  
          'sorted_scores', ...
+         'freqs', ...      
+         'chanlabs', ...
          'cfg');
      
-    fprintf('Mean Score (Top %d): %.4f\n', top_k, mean(sorted_scores(1:top_k)));
-    fprintf('Feature selection saved to %s\n', output_filepath);
+    fprintf('[select_features] Top %d features selected. Mean Score: %.4f\n', ...
+            length(best_features_idx), mean(sorted_scores(1:length(best_features_idx))));
+    fprintf('[select_features] Saved to: %s\n', output_filepath);
 end
 
 %% Helper Function
 function fs = calculate_fisher_score(X, y, classA, classB)
-% CALCULATE_FISHER_SCORE Computes the Fisher Score for binary classification.
-% Formula: (muA - muB)^2 / (varA + varB)
-
-    % Logical indices for the two classes
+    % Logical indices
     idxA = (y == classA);
     idxB = (y == classB);
+    
+    if sum(idxA) == 0 || sum(idxB) == 0
+        warning('[select_features] Missing samples for one class. Returning zeros.');
+        fs = zeros(1, size(X, 2));
+        return;
+    end
     
     % Split data
     XA = X(idxA, :);
     XB = X(idxB, :);
     
-    % Compute mean and variance
+    % Fisher formula
     muA = mean(XA, 1);
     muB = mean(XB, 1);
     varA = var(XA, 0, 1);
     varB = var(XB, 0, 1);
     
-    % Compute score (adding epsilon to avoid division by zero)
-    eps0 = 1e-12;
+    eps0 = 1e-12; 
     fs = (muA - muB).^2 ./ (varA + varB + eps0);
 end

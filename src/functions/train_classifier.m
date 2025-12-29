@@ -1,95 +1,111 @@
-function train_classifier(input_activity, input_fisher, output_model)
-% TRAIN_CLASSIFIER Trains the LDA model for Single Sample Classification.
+function model = train_classifier(activity_path, fisher_path, output_model_path, cfg)
+% TRAIN_CLASSIFIER Trains an LDA classifier.
 %
-% This function prepares the training dataset by flattening the temporal
-% dimension of the trials (Single Sample approach). It selects the top
-% discriminative features based on the Fisher Score and trains a Linear
-% Discriminant Analysis (LDA) classifier.
+% This function loads the Activity data, slices it to keep only the active
+% feedback phase, reshapes it into a Single Sample dataset 
+% [Samples x Features], and trains an LDA model.
 %
 % INPUTS:
-%   input_activity - Path to the segmented Activity matrix (Offline).
-%   input_fisher   - Path to the Fisher Score results (Indices).
-%   output_model   - Path where the trained model will be saved.
+%   activity_path     - Path to file containing 'Activity' matrix.
+%   fisher_path       - Path to file containing Fisher Scores.
+%   output_model_path - Path where the trained model will be saved.
+%   cfg               - Config struct.
 %
-% USAGE:
-%   train_classifier(cfg.files.activity_offline, cfg.files.fisher_results, cfg.files.model);
+% OUTPUT:
+%   model - Trained ClassificationDiscriminant object.
 
-    %% Configuration
-    if evalin('base', 'exist(''cfg'',''var'')')
-        cfg = evalin('base', 'cfg');
-    else
-        cfg = get_config();
+    %% Input Validation
+    if nargin < 4
+        error('[train_classifier] Not enough input arguments.');
     end
 
-    fprintf('Starting Classifier Training (LDA)...\n');
-
+    fprintf('[train_classifier] Loading data from: %s\n', activity_path);
+    
     % Check inputs
-    if ~exist(input_activity, 'file') || ~exist(input_fisher, 'file')
-        error('Input files missing. Run feature selection first.');
+    if ~exist(activity_path, 'file') || ~exist(fisher_path, 'file')
+        error('[train_classifier] Input files missing. Run feature selection first.');
     end
 
-    % Load Data
-    load(input_activity, 'Activity', 'mi_class_events');
-    load(input_fisher, 'best_features_idx');
+    % Load data
+    data_act = load(activity_path);
+    data_fish = load(fisher_path);
+    
+    Activity = data_act.Activity;            
+    labels   = data_act.all_trials_labels;
+    onsets   = data_act.all_cue_onsets;
+    
+    best_features_idx = data_fish.best_features_idx;
 
-    %% Data Preparation (Reshaping for Single Sample)
-    % Activity structure: [Samples x Freq x Chan x Trials]
-    % Target X matrix:    [(Samples*Trials) x (Freq*Chan)]
-    % Target y vector:    [(Samples*Trials) x 1]
+    %% Data Preparation
+    fprintf('[train_classifier] Preparing Single Sample dataset...\n');
     
-    [n_samples, n_freq, n_chan, n_trials] = size(Activity);
-    
-    fprintf('Preparing training matrix from %d trials...\n', n_trials);
-
-    % Permute to bring Samples and Trials together in the first dimensions
-    % and Features (Freq, Chan) to the end.
-    % New order: [Samples, Trials, Freq, Chan]
-    Activity_perm = permute(Activity, [1 4 2 3]);
-    
-    % Reshape into 2D Matrix [Rows, Features]
-    % Rows = Samples * Trials
-    % Features = Freq * Chan
-    n_rows = n_samples * n_trials;
+    [~, n_freq, n_chan, n_trials] = size(Activity);
     n_features_total = n_freq * n_chan;
     
-    X_full = reshape(Activity_perm, n_rows, n_features_total);
+    X_list = cell(n_trials, 1);
+    y_list = cell(n_trials, 1);
     
-    % Create label vector
-    y_full = repelem(mi_class_events, n_samples);
+    for t = 1:n_trials
+        % Slice
+        t_start = onsets(t);
+        
+        % Check for NaNs (padding) at the end of Activity
+        trial_data = Activity(t_start:end, :, :, t);
+        
+        % Flatten spatial-frequency dimensions: [Time x (Freq*Chan)]
+        trial_flat = reshape(trial_data, size(trial_data, 1), n_features_total);
+        
+        % Remove rows that are fully NaN (padding)
+        valid_rows = ~any(isnan(trial_flat), 2);
+        trial_flat = trial_flat(valid_rows, :);
+        
+        X_list{t} = trial_flat;
+        
+        % Create label vector for these samples
+        y_list{t} = repmat(labels(t), size(trial_flat, 1), 1);
+    end
+    
+    % Concatenate all samples from all trials
+    X_full = vertcat(X_list{:});
+    y_full = vertcat(y_list{:});
 
     %% Feature Selection
-    % Determine how many features to use
-    n_features_model = cfg.train.n_features;
+    if isfield(cfg, 'train') && isfield(cfg.train, 'n_features')
+        n_feat = cfg.train.n_features;
+    else
+        n_feat = 10;
+    end
     
-    % Select the top K indices derived from Fisher Score
-    selected_indices = best_features_idx(1:n_features_model);
+    % Use the indices from Fisher Score
+    selected_idx = best_features_idx(1:min(n_feat, length(best_features_idx)));
     
-    X_train = X_full(:, selected_indices);
+    X_train = X_full(:, selected_idx);
     y_train = y_full;
     
-    fprintf('Selected top %d features. Training set size: %d samples.\n', ...
-            n_features_model, size(X_train, 1));
+    fprintf('[train_classifier] Training set: %d samples, %d features.\n', size(X_train, 1), length(selected_idx));
 
     %% Model Training (LDA)
+    fprintf('[train_classifier] Training LDA model...\n');
     t_start = tic;
-    model = fitcdiscr(X_train, y_train);
-    train_time = toc(t_start);
     
-    fprintf('Model trained in %.2f seconds.\n', train_time);
+    % Train Linear Discriminant Analysis
+    model = fitcdiscr(X_train, y_train, 'DiscrimType', 'linear');
+    
+    fprintf('[train_classifier] Training completed in %.2f seconds.\n', toc(t_start));
 
     %% Calibration Accuracy
     pred = predict(model, X_train);
     accuracy = sum(pred == y_train) / length(y_train) * 100;
     
-    fprintf('Calibration Accuracy: %.2f%%\n', accuracy);
+    fprintf('[train_classifier] Calibration Accuracy (Single Sample): %.2f%%\n', accuracy);
 
-    %% Saving Model
-    % Create output directory if needed
-    output_dir = fileparts(output_model);
-    if ~exist(output_dir, 'dir'), mkdir(output_dir); end
+    %% Saving
+    output_dir = fileparts(output_model_path);
+    if ~exist(output_dir, 'dir')
+        mkdir(output_dir); 
+    end
     
-    % Save the model and the indices needed to preprocess new data
-    save(output_model, 'model', 'selected_indices', 'accuracy', 'cfg');
-    
-    fprintf('Model saved to %s\n', output_model);
+    % Save model and selected features
+    save(output_model_path, 'model', 'selected_idx', 'accuracy');
+    fprintf('[train_classifier] Model saved to: %s\n', output_model_path);
 end

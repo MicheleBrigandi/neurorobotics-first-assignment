@@ -3,8 +3,8 @@
 %  ========================================================================
 %  
 %  PIPELINE STRUCTURE:
-%    0. SETUP:         Automatic organisation of raw GDF files
-%    1. PREPROCESSING: Concatenation, Spatial Filtering, PSD, Segmentation
+%    0. SETUP:         Automatic organisation of raw GDF files into subject folders
+%    1. PREPROCESSING: GDF -> MAT conversion, Laplacian, PSD, Trial Extraction
 %    2. TRAINING:      Feature Selection (Fisher Score) & Model Training (LDA)
 %    3. EVALUATION:    Online Testing
 %    4. VISUALISATION: ERD/ERS Maps and Global Power Analysis
@@ -25,117 +25,146 @@ addpath(genpath('data'));
 if exist('get_config', 'file')
     cfg = get_config();
 else
-    error('Configuration file "src/scripts/get_config.m" not found. Please check directory structure.');
+    error('Configuration file "get_config.m" not found. Please check directory structure.');
 end
 
 fprintf('=== BCI PIPELINE INITIALISED ===\n');
 
 %% CONTROL FLAGS
 % Toggle these flags to run specific parts of the pipeline
-
-DO_DATA_SETUP     = false;
-DO_PREPROCESSING  = false;  
-DO_TRAINING       = true;  
-DO_TESTING        = false;  
-DO_VISUALISATION  = false; 
+DO_DATA_SETUP     = true;   % Run once to sort downloaded files
+DO_PREPROCESSING  = true;   % Converts GDFs and computes PSD/Activity
+DO_TRAINING       = true;   % Feature Selection + LDA Training
+DO_TESTING        = false;  % (To be implemented)
+DO_VISUALISATION  = false;  % (To be implemented later)
 
 %% 0. SETUP
 if DO_DATA_SETUP
-    fprintf('\n=== PHASE 0: SETUP ===\n');
+    fprintf('\n=== PHASE 0: DATASET ORGANISATION ===\n');
     
-    % Check if the download folder exists and contains GDF files
-    if exist(cfg.paths.downloads, 'dir') && ~isempty(dir(fullfile(cfg.paths.downloads, '**', '*.gdf')))
-        
-        % Check if the destination folder is empty to avoid redundant copying
-        if isempty(dir(fullfile(cfg.paths.raw_offline, '*.gdf')))
-            fprintf('New raw dataset detected. Organising file structure...\n');
-            
-            % Call the organisation function with the path from config
-            organize_dataset(cfg.paths.downloads);
-        else
-            fprintf('Dataset already organised. Skipping setup.\n');
-        end
+    % Define where raw data should be stored
+    raw_data_root = fullfile(cfg.paths.data, 'raw');
+    
+    % Check if downloads folder exists
+    if exist(cfg.paths.downloads, 'dir')
+        fprintf('Organising dataset from: %s\n', cfg.paths.downloads);
+        organize_dataset(cfg.paths.downloads, raw_data_root);
     else
-        fprintf('No downloads detected or folders already set up.\n');
+        warning('Downloads folder not found at %s. Assuming data is already in %s.', ...
+                cfg.paths.downloads, raw_data_root);
     end
 end
 
-%% 1. PREPROCESSING
-if DO_PREPROCESSING
-    fprintf('\n=== PHASE 1: DATA PREPROCESSING ===\n');
-    
-    % Data Ingestion
-    % Merges individual GDF files into single continuous MAT files
-    fprintf('Concatenating GDF files...\n');
-    concat_gdf(cfg.paths.raw_offline, cfg.files.concat_offline);
-    concat_gdf(cfg.paths.raw_online,  cfg.files.concat_online);
-    
-    % Spectrogram Computation (PSD)
-    % Applies Laplacian spatial filter and computes PSD over time windows
-    fprintf('Computing Power Spectral Density (PSD)...\n');
-    compute_psd(cfg.files.concat_offline, cfg.files.psd_offline);
-    compute_psd(cfg.files.concat_online,  cfg.files.psd_online);
-    
-    % Trial Segmentation
-    % Extracts the relevant "Continuous Feedback" phase based on Cue triggers
-    fprintf('Segmenting trials...\n');
-    extract_trials(cfg.files.psd_offline, cfg.files.activity_offline);
-    extract_trials(cfg.files.psd_online,  cfg.files.activity_online);
-    
-    fprintf('Preprocessing completed successfully.\n');
-else
-    fprintf('\n[Phase 1 Skipped] Assuming preprocessed data exists.\n');
+%% SUBJECT DISCOVERY
+% Scan the 'raw' folder to find all subjects automatically
+raw_root = fullfile(cfg.paths.data, 'raw');
+if ~exist(raw_root, 'dir')
+    error('Raw data folder not found. Run SETUP phase first.');
 end
 
-%% 2. MODEL CALIBRATION
-if DO_TRAINING
-    fprintf('\n=== PHASE 2: TRAINING ===\n');
+dir_content = dir(raw_root);
+% Filter out dots and non-folders to get subject list
+subjects = dir_content([dir_content.isdir] & ~startsWith({dir_content.name}, '.'));
+
+if isempty(subjects)
+    error('No subjects found in %s.', raw_root);
+end
+
+fprintf('\nFound %d subjects: %s\n', length(subjects), strjoin({subjects.name}, ', '));
+
+%% MAIN SUBJECT LOOP
+for s = 1:length(subjects)
+    subj_id = subjects(s).name;
     
-    % Ensure offline data is available
-    if ~exist(cfg.files.activity_offline, 'file')
-        error('Offline Activity data missing. Run Phase 1 first.');
+    fprintf('\n-------------------------------------------------\n');
+    fprintf('PROCESSING SUBJECT: %s (%d/%d)\n', subj_id, s, length(subjects));
+    fprintf('-------------------------------------------------\n');
+    
+    % Define subject-specific paths
+    % Input raw directories
+    raw_off_dir = fullfile(raw_root, subj_id, 'offline');
+    raw_on_dir  = fullfile(raw_root, subj_id, 'online');
+    
+    % Intermediate processed directories
+    subj_proc_dir = fullfile(cfg.paths.data_processed, subj_id);
+    
+    temp_off_dir = fullfile(subj_proc_dir, 'temp_raw_offline');
+    temp_on_dir  = fullfile(subj_proc_dir, 'temp_raw_online');
+    
+    psd_off_dir  = fullfile(subj_proc_dir, 'psd_offline');
+    psd_on_dir   = fullfile(subj_proc_dir, 'psd_online');
+    
+    % Final aggregated files
+    activity_off_file = fullfile(subj_proc_dir, 'activity_offline.mat');
+    activity_on_file  = fullfile(subj_proc_dir, 'activity_online.mat');
+    
+    % Results/Models
+    subj_results_dir = fullfile(cfg.paths.results, subj_id);
+    fisher_file      = fullfile(subj_results_dir, 'fisher_results.mat');
+    model_file       = fullfile(subj_results_dir, 'classifier_model.mat');
+    
+    % Ensure results directory exists
+    if ~exist(subj_results_dir, 'dir')
+        mkdir(subj_results_dir); 
+    end
+
+    %% 1. PREPROCESSING
+    if DO_PREPROCESSING
+        fprintf('[%s] --- PHASE 1: PREPROCESSING ---\n', subj_id);
+        
+        % Convert GDF to MAT
+        % This creates individual .mat files for each run
+        convert_gdf2mat(raw_off_dir, temp_off_dir);
+        convert_gdf2mat(raw_on_dir,  temp_on_dir);
+        
+        % Compute PSD
+        % Applies Laplacian and computes Spectrogram for each file
+        compute_psd(temp_off_dir, psd_off_dir, cfg.files.laplacian, cfg);
+        compute_psd(temp_on_dir,  psd_on_dir,  cfg.files.laplacian, cfg);
+        
+        % Trial extraction and concatenation
+        % Segments trials and saves a single Activity file
+        extract_trials(psd_off_dir, activity_off_file, cfg);
+        extract_trials(psd_on_dir,  activity_on_file,  cfg);
+        
+        fprintf('[%s] Preprocessing complete.\n', subj_id);
     end
     
-    % Feature Selection
-    % Analyses the offline data to find the most discriminative 
-    % Frequency-Channel pairs.
-    fprintf('Selecting features...\n');
-    select_features(cfg.files.activity_offline, cfg.files.fisher_results);
+    %% 2. MODEL CALIBRATION
+    if DO_TRAINING
+        fprintf('[%s] --- PHASE 2: TRAINING ---\n', subj_id);
+        
+        if ~exist(activity_off_file, 'file')
+            warning('Offline activity file missing for %s. Skipping training.', subj_id);
+            continue;
+        end
+        
+        % Feature Selection (Fisher Score)
+        % Selects discriminative features based on the offline data
+        select_features(activity_off_file, fisher_file, cfg);
+        
+        % Classifier Training (LDA)
+        % Trains the model using the selected features and saves it
+        train_classifier(activity_off_file, fisher_file, model_file, cfg);
+        
+        fprintf('[%s] Training complete. Model saved.\n', subj_id);
+    end
     
-    % Classifier Training
-    % Trains the Linear Discriminant Analysis model using the selected features
-    fprintf('Training classifier...\n');
-    train_classifier(cfg.files.activity_offline, ...
-                     cfg.files.fisher_results, ...
-                     cfg.files.model);
-                     
-    fprintf('Training completed. Model saved.\n');
-else
-    fprintf('\n[Phase 2 Skipped] Assuming model already trained.\n');
-end
+    %% 3. EVALUATION (Online Testing)
+    if DO_TESTING
+        fprintf('[%s] --- PHASE 3: EVALUATION ---\n', subj_id);
+        % Placeholder for evaluation function
+        % evaluate_performance(activity_on_file, model_file, cfg);
+    end
 
-%% 3. EVALUATION
-if DO_TESTING
-    fprintf('\n=== PHASE 3: ONLINE EVALUATION ===\n');
-else
-    fprintf('\n[Phase 3 Skipped]\n');
-end
-
-%% 4. VISUALISATION
-if DO_VISUALISATION
-    fprintf('\n=== PHASE 4: VISUALISATION ===\n');
+    %% 4. VISUALISATION
+    if DO_VISUALISATION
+        fprintf('[%s] --- PHASE 4: VISUALISATION ---\n', subj_id);
+        % Placeholder for visualization functions
+        % erd_ers(activity_off_file, cfg);
+        % analyze_eeg(activity_off_file, cfg);
+    end
     
-    % Band Power Analysis
-    % Generates a bar chart of Mu/Beta power across channels
-    fprintf('Running Global Band Power Analysis...\n');
-    run('analyze_eeg.m');
-    
-    % ERD/ERS Maps
-    % Generates Time-Frequency maps for C3/C4 channels.
-    fprintf('Running ERD/ERS visualisation...\n');
-    run('visualize_erd_ers.m');
-    
-    fprintf('Visualisation generated.\n');
 end
 
 fprintf('\n=== PIPELINE EXECUTION FINISHED ===\n');

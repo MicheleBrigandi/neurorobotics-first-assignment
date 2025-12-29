@@ -1,94 +1,90 @@
-function organize_dataset(source_dir)
-% ORGANISE_DATASET Automatically sorts raw GDF files into pipeline folders.
+function organize_dataset(source_dir, output_root_dir)
+% ORGANISE_DATASET Sorts raw GDF files into a subject-specific structure.
 %
-% This function recursively scans a source directory and sorts files into 
-% offline/online folders based on their filenames.
+% This function scans the source directory, identifies the subject ID from 
+% the filename, and copies files into a structured hierarchy:
+%   <output_root_dir>/<subject_id>/offline/
+%   <output_root_dir>/<subject_id>/online/
 %
 % INPUTS:
-%   source_dir (Optional) - String path to the downloaded dataset.
-%                           If not provided, uses cfg.paths.downloads.
+%   source_dir      - String path to the downloaded dataset (source).
+%   output_root_dir - String path to the root raw data folder (destination).
 %
 % USAGE:
-%   organize_dataset();                   % Uses default config path
-%   organize_dataset('C:/Downloads/EEG'); % Uses custom path
+%   organize_dataset(cfg.paths.downloads, fullfile(cfg.paths.data, 'raw'));
 
-    %% Configuration
-    % Load configuration to get destination paths
-    if evalin('base', 'exist(''cfg'',''var'')')
-        cfg = evalin('base', 'cfg');
-    else
-        cfg = get_config();
+    %% Input Validation
+    if nargin < 2
+        error('[organize_dataset] Error: Both source_dir and output_root_dir must be provided.');
     end
 
-    % Handle input argument
-    if nargin < 1 || isempty(source_dir)
-        source_dir = cfg.paths.downloads;
-    end
-
-    % Define destinations
-    dest_offline = cfg.paths.raw_offline;
-    dest_online  = cfg.paths.raw_online;
-
-    % Validation
     if ~exist(source_dir, 'dir')
-        warning('Source directory "%s" not found. Skipping organisation.', source_dir);
+        warning('[organize_dataset] Source directory "%s" not found.', source_dir);
         return;
     end
 
-    % Ensure destination directories exist
-    if ~exist(dest_offline, 'dir'), mkdir(dest_offline); end
-    if ~exist(dest_online, 'dir'),  mkdir(dest_online);  end
+    % Ensure the output root exists
+    if ~exist(output_root_dir, 'dir')
+        mkdir(output_root_dir);
+    end
 
     %% File Discovery
-    fprintf('Scanning for GDF files in: %s ...\n', source_dir);
+    fprintf('[organize_dataset] Scanning for GDF files in: %s ...\n', source_dir);
     
     % Recursively find all .gdf files
     all_files = dir(fullfile(source_dir, '**', '*.gdf'));
     
     if isempty(all_files)
-        warning('No GDF files found. Check if the dataset is extracted.');
+        warning('[organize_dataset] No GDF files found.');
         return;
     end
 
-    %% Sorting
-    count_off = 0;
-    count_on  = 0;
-    
-    fprintf('Found %d files. Sorting...\n', length(all_files));
+    %% Sorting Procedure
+    count_files = 0;
+    fprintf('[organize_dataset] Found %d files. Starting sorting...\n', length(all_files));
     
     for i = 1:length(all_files)
         filename = all_files(i).name;
         full_source_path = fullfile(all_files(i).folder, filename);
         
-        % Check if the file is offline or online using case-insensitive search
-        is_offline = contains(filename, 'offline', 'IgnoreCase', true);
-        is_online  = contains(filename, 'online',  'IgnoreCase', true);
+        % Extract subject ID
+        % Assumption: filename format is 'subjectID.date.time.type...' 
+        tokens = strsplit(filename, '.');
+        if isempty(tokens)
+            fprintf('[organize_dataset] [SKIP] Could not parse filename: %s\n', filename);
+            continue;
+        end
+        subject_id = tokens{1};
         
-        target_path = '';
-        
-        if is_offline
-            target_path = fullfile(dest_offline, filename);
-            count_off = count_off + 1;
-            type_str = '[OFFLINE]';
-        elseif is_online
-            target_path = fullfile(dest_online, filename);
-            count_on = count_on + 1;
-            type_str = '[ONLINE]';
+        % Determine run type
+        if contains(filename, 'offline', 'IgnoreCase', true)
+            run_type = 'offline';
+        elseif contains(filename, 'online', 'IgnoreCase', true)
+            run_type = 'online';
         else
-            fprintf('[SKIP] Unclassified file: %s\n', filename);
+            fprintf('[organize_dataset] [SKIP] Unclassified run type: %s\n', filename);
             continue;
         end
         
-        % Copy
+        % Construct subject-specific destination path
+        target_dir = fullfile(output_root_dir, subject_id, run_type);
+        target_path = fullfile(target_dir, filename);
+        
+        % Ensure the target directory exists
+        if ~exist(target_dir, 'dir')
+            mkdir(target_dir);
+        end
+        
+        % Copy file
         if ~exist(target_path, 'file')
             copyfile(full_source_path, target_path);
-            fprintf('%s Copied: %s\n', type_str, filename);
+            fprintf('[organize_dataset] [%s] [%s] Copied: %s\n', subject_id, upper(run_type), filename);
+            count_files = count_files + 1;
         end
     end
     
     %% Final Summary
-    fprintf('--- Organisation Complete ---\n');
-    fprintf('New files in offline: %d\n', count_off);
-    fprintf('New files in online: %d\n', count_on);
+    fprintf('[organize_dataset] Organisation complete.\n');
+    fprintf('[organize_dataset] Total files organised: %d\n', count_files);
+    fprintf('[organize_dataset] Data structure ready at: %s\n', output_root_dir);
 end
-
