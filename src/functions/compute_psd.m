@@ -59,8 +59,7 @@ function compute_psd(input_filepath, output_filepath)
 
     %% Spectrogram Computation
     % Compute the spectrogram using the parameters from get_config
-    fprintf('Computing spectrogram (Window: %.2fs, Step: %.4fs)...\n', ...
-            cfg.spec.wlength, cfg.spec.wshift);
+    fprintf('Computing spectrogram...\n');
             
     % Note: proc_spectrogram is an external function provided in the repo
     [PSD_full, f_full] = proc_spectrogram(s_lap, ...

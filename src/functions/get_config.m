@@ -84,5 +84,5 @@ function cfg = get_config()
     
     % Number of top discriminative features (Frequency-Channel pairs) to select
     % using the Fisher Score algorithm
-    cfg.train.n_features = 50;
+    cfg.train.n_features = 30;
 end

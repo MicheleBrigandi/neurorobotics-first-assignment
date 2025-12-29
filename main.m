@@ -31,10 +31,10 @@ end
 fprintf('=== BCI PIPELINE INITIALISED ===\n');
 
 %% CONTROL FLAGS
-% Toggle these flags to run specific parts of the pipeline.
+% Toggle these flags to run specific parts of the pipeline
 
-DO_DATA_SETUP     = true;
-DO_PREPROCESSING  = true;  
+DO_DATA_SETUP     = false;
+DO_PREPROCESSING  = false;  
 DO_TRAINING       = true;  
 DO_TESTING        = false;  
 DO_VISUALISATION  = false; 
