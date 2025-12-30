@@ -101,31 +101,55 @@ function select_features(input_filepath, output_filepath, cfg)
     %% Visualization
     fisher_map = reshape(scores, n_freq, n_chan);
     
-    figure('Name', 'Fisher Score Analysis', 'Color', 'w', 'NumberTitle', 'off');
+    % Create figure
+    fig = figure('Name', 'Fisher Score Analysis', 'Color', 'w', ...
+                 'Visible', 'off', 'Position', [0 0 1000 800]);
     
-    % Plot Heatmap (Channels on Y, Frequencies on X)
+    % Plot heatmap
     imagesc(fisher_map'); 
     colorbar;
     
-    % X-Axis: Frequencies
+    % X-Axis: frequencies
     num_xticks = 10;
     xticks_idx = round(linspace(1, n_freq, num_xticks));
     xticks(xticks_idx);
     xticklabels(arrayfun(@(x) sprintf('%.1f', x), freqs(xticks_idx), 'UniformOutput', false));
     xlabel('Frequency (Hz)');
     
-    % Y-Axis: Channels
-    if ~isempty(chanlabs)
+    % Y-Axis: channels
+    ylabel('Channel');
+    
+    if isfield(cfg, 'channels') && isfield(cfg.channels, 'names')
+        % Use descriptive names
+        n_labels = min(length(cfg.channels.names), n_chan);
+        yticks(1:n_labels);
+        yticklabels(cfg.channels.names(1:n_labels));
+    elseif ~isempty(chanlabs)
+        % Fallback to file labels
         yticks(1:n_chan);
         yticklabels(chanlabs);
     else
+        % Fallback to indices
         ylabel('Channel Index');
     end
     
-    title(sprintf('Fisher Score: Class %d vs %d', class_A, class_B));
-    axis xy; 
+    title(sprintf('Fisher Score Distribution: Class %d vs %d', class_A, class_B));
+    axis xy; % Ensure frequency starts from bottom
     
-    fprintf('[select_features] Visualization created.\n');
+    % Save image
+    output_dir = fileparts(output_filepath);
+    if ~exist(output_dir, 'dir') 
+        mkdir(output_dir); 
+    end
+    
+    % Save as PNG
+    [~, name, ~] = fileparts(output_filepath);
+    img_filepath = fullfile(output_dir, [name '.png']);
+    
+    saveas(fig, img_filepath);
+    close(fig);
+    
+    fprintf('[select_features] Visualisation saved to: %s\n', img_filepath);
 
     %% Saving Results
     output_dir = fileparts(output_filepath);

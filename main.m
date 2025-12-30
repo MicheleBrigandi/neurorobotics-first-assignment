@@ -7,7 +7,8 @@
 %    1. PREPROCESSING: GDF -> MAT conversion, Laplacian, PSD, Trial Extraction
 %    2. TRAINING:      Feature Selection (Fisher Score) & Model Training (LDA)
 %    3. EVALUATION:    Online Testing with Evidence Accumulation
-%    4. VISUALISATION: ERD/ERS Maps and Global Power Analysis
+%    4. VISUALISATION: ERD/ERS Maps and Global Power Analysis (Single Subject)
+%    5. POPULATION:    Grand Average Analysis
 %
 %  USAGE:
 %    Set the boolean flags below to 'true' or 'false' to control which
@@ -36,7 +37,7 @@ DO_DATA_SETUP     = true;   % Run once to sort downloaded files
 DO_PREPROCESSING  = true;   % Converts GDFs and computes PSD/Activity
 DO_TRAINING       = true;   % Feature Selection + LDA Training
 DO_TESTING        = true;   % Run Evaluation on Online Data
-DO_VISUALISATION  = false;  % (To be implemented later)
+DO_VISUALISATION  = true;   % Generates ERD maps and Band Power plots
 
 %% 0. SETUP
 if DO_DATA_SETUP
@@ -113,17 +114,14 @@ for s = 1:length(subjects)
         fprintf('[%s] --- PHASE 1: PREPROCESSING ---\n', subj_id);
         
         % Convert GDF to MAT
-        % This creates individual .mat files for each run
         convert_gdf2mat(raw_off_dir, temp_off_dir);
         convert_gdf2mat(raw_on_dir,  temp_on_dir);
         
         % Compute PSD
-        % Applies Laplacian and computes Spectrogram for each file
         compute_psd(temp_off_dir, psd_off_dir, cfg.files.laplacian, cfg);
         compute_psd(temp_on_dir,  psd_on_dir,  cfg.files.laplacian, cfg);
         
         % Trial extraction and concatenation
-        % Segments trials and saves a single Activity file
         extract_trials(psd_off_dir, activity_off_file, cfg);
         extract_trials(psd_on_dir,  activity_on_file,  cfg);
         
@@ -140,11 +138,9 @@ for s = 1:length(subjects)
         end
         
         % Feature Selection (Fisher Score)
-        % Selects discriminative features based on the offline data
         select_features(activity_off_file, fisher_file, cfg);
         
         % Classifier Training (LDA)
-        % Trains the model using the selected features and saves it
         train_classifier(activity_off_file, fisher_file, model_file, cfg);
         
         fprintf('[%s] Training complete. Model saved.\n', subj_id);
@@ -166,14 +162,33 @@ for s = 1:length(subjects)
         fprintf('[%s] Evaluation complete.\n', subj_id);
     end
 
-    %% 4. VISUALISATION
+    %% 4. VISUALISATION (Single Subject)
     if DO_VISUALISATION
         fprintf('[%s] --- PHASE 4: VISUALISATION ---\n', subj_id);
-        % Placeholder for visualization functions
-        % erd_ers(activity_off_file, cfg);
-        % analyze_eeg(activity_off_file, cfg);
+        
+        if ~exist(activity_off_file, 'file')
+            warning('Activity file missing. Skipping visualization.');
+        else
+            % A. ERD/ERS Maps (Time-Frequency)
+            % Generates 'erd_ers_maps.png' in the subject results folder
+            visualize_erd_ers(activity_off_file, subj_results_dir, cfg);
+            
+            % B. Global Band Power (Bar Charts)
+            % Generates 'global_band_power.png' in the subject results folder
+            analyze_eeg(activity_off_file, subj_results_dir, cfg);
+        end
     end
     
+end
+
+%% 5. POPULATION ANALYSIS
+% Runs once after all subjects are processed
+if DO_VISUALISATION
+    fprintf('\n--- PHASE 5: POPULATION ANALYSIS (GRAND AVERAGE) ---\n');
+    
+    % Pass directories explicitly as required by the new function signature
+    compute_grand_average(cfg.paths.data_processed, cfg.paths.results, ...
+                          cfg.grandaverage.target_filename, cfg);
 end
 
 fprintf('\n=== PIPELINE EXECUTION FINISHED ===\n');
