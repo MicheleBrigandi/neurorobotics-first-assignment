@@ -3,7 +3,7 @@
 ## Project Overview
 This repository contains the MATLAB implementation for the first assignment of the Neurorobotics course (2025/2026). The project focuses on the analysis of Electroencephalography (EEG) data collected from 8 healthy subjects during a Motor Imagery (MI) Brain-Computer Interface (BCI) experiment.
 
-The objective is to develop a complete processing pipeline to classify two distinct motor imagery tasks: Both Hands vs. Both Feet. The pipeline includes data organisation, signal preprocessing, feature extraction, classifier training, online evaluation, and metrics visualisation.
+The objective is to develop a complete processing pipeline to classify two distinct motor imagery tasks: **Both Hands** vs **Both Feet**. The pipeline includes data organisation, signal preprocessing, feature extraction, classifier training, online evaluation, and metrics visualisation.
 
 ## Repository Structure
 The project is organised into a modular structure to ensure flexibility and maintainability.
