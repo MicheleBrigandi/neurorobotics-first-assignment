@@ -154,12 +154,13 @@ for s = 1:length(subjects)
     if DO_TESTING
         fprintf('[%s] --- PHASE 3: EVALUATION ---\n', subj_id);
         
-        % Check if online data and model exist
-        if exist(activity_on_file, 'file') && exist(model_file, 'file')
-            % Run evaluation with Evidence Accumulation
-            test_classifier(activity_on_file, model_file, cfg);
+        if ~exist(activity_on_file, 'file')
+            warning('[%s] Online activity file not found. Skipping evaluation.', subj_id);
+        elseif ~exist(model_file, 'file')
+            warning('[%s] Model file not found. Skipping evaluation.', subj_id);
         else
-            warning('Skipping Evaluation: Missing online activity file or trained model for %s.', subj_id);
+            % Evaluate the classifier on online data
+            test_classifier(activity_on_file, model_file, cfg);
         end
         
         fprintf('[%s] Evaluation complete.\n', subj_id);

@@ -1,31 +1,28 @@
-function results = test_classifier(activity_path, model_path, cfg)
-% TEST_CLASSIFIER Evaluates the BCI model on online data.
+function test_classifier(activity_path, model_path, cfg)
+% TEST_CLASSIFIER Evaluates the trained BCI model on online data.
 %
-% This function loads the online 'Activity' data and the trained model.
-% It performs two types of evaluation:
-%   1. Single Sample: Accuracy of the classifier on every individual time point.
-%   2. Simulated Online Control: Applies an evidence accumulation framework
-%      (exponential smoothing) on the posterior probabilities to determine
-%      trial accuracy and command delivery latency.
+% This function performs the evaluation phase of the BCI pipeline.
+% It loads the online 'Activity' data and the pre-trained LDA model.
+% It calculates:
+%   1. Single Sample Accuracy (Raw classifier performance)
+%   2. Trial Accuracy (Using Evidence Accumulation Framework)
+%   3. Average Time to Command (Latency)
+%   4. Confusion Matrix
+%   5. Cohen's Kappa
 %
 % INPUTS:
-%   activity_path - Path to the 'Activity' .mat file (Online runs).
-%   model_path    - Path to the trained 'classifier_model.mat'.
+%   activity_path - Path to the 'Activity_online.mat' file.
+%   model_path    - Path to the 'classifier_model.mat' file.
 %   cfg           - Configuration struct.
-%
-% OUTPUT:
-%   results       - Struct containing accuracy metrics and latencies.
 
-    %% Input Validation
+    %% 1. Input Validation and Loading
     if nargin < 3
-        error('[test_classifier] Not enough input arguments.');
+        error('[test_classifier] Error: Not enough input arguments.');
     end
 
     fprintf('[test_classifier] Loading data: %s\n', activity_path);
-    fprintf('[test_classifier] Loading model: %s\n', model_path);
-
     if ~exist(activity_path, 'file') || ~exist(model_path, 'file')
-        error('[test_classifier] Input files missing.');
+        error('[test_classifier] Input files not found.');
     end
 
     % Load Data
@@ -34,136 +31,180 @@ function results = test_classifier(activity_path, model_path, cfg)
     labels   = data_act.all_trials_labels;
     onsets   = data_act.all_cue_onsets;
     
-    % Load Model and selected feature indices
-    data_model   = load(model_path);
-    model        = data_model.model;
+    % Load Model
+    data_model = load(model_path);
+    model = data_model.model;
     selected_idx = data_model.selected_idx;
 
-    %% Configuration for Evidence Accumulation
-    % alpha: Smoothing factor (0 to 1). Higher = more smoothing (slower but more stable).
-    % threshold: Confidence level required to deliver a command.
-    accum_alpha     = 0.95; 
-    accum_threshold = 0.75; 
+    fprintf('[test_classifier] Model loaded. Features: %d\n', length(selected_idx));
+
+    %% 2. Parameters for Evidence Accumulation
+    % Framework: Exponential Smoothing of Posterior Probabilities
+    % P(t) = alpha * P(t-1) + (1-alpha) * P_current
+    
+    alpha = 0.95;       % Smoothing factor (0 < alpha < 1). High = more stable/slow.
+    threshold = 0.70;   % Probability threshold to send a command.
     
     class_A = cfg.codes.hands;
     class_B = cfg.codes.feet;
-    
-    %% Evaluation Loop
-    fprintf('[test_classifier] Evaluating %d trials...\n', length(labels));
+
+    %% 3. Evaluation Loop
     
     [~, n_freq, n_chan, n_trials] = size(Activity);
     n_features_total = n_freq * n_chan;
+    
+    % Accumulators
+    ss_correct = 0;
+    ss_total = 0;
+    
+    trial_results = zeros(n_trials, 1); % 1 = Correct, 0 = Incorrect/Timeout
+    trial_latencies = [];               % Store time to command
+    
+    % For Confusion Matrix
+    true_labels_list = [];
+    pred_labels_list = [];
 
-    % Accumulators for Global Metrics
-    total_samples = 0;
-    correct_samples = 0;
-    
-    trial_results = zeros(n_trials, 1); % 1 = Correct, 0 = Incorrect/Miss
-    command_latencies = [];             % Time (seconds) to reach threshold
-    
+    fprintf('[test_classifier] Evaluating %d trials...\n', n_trials);
+
     for t = 1:n_trials
-        %% 1. Data Preparation (Same as Training)
+        % --- A. Prepare Data (Same as Training) ---
         t_start = onsets(t);
         
-        % Slice active phase (Cue -> Feedback End)
+        % Slice active phase (Cue -> End)
         trial_data = Activity(t_start:end, :, :, t);
         
         % Flatten: [Time x Features]
         trial_flat = reshape(trial_data, size(trial_data, 1), n_features_total);
         
-        % Handle NaNs (padding)
+        % Remove NaNs (padding)
         valid_rows = ~any(isnan(trial_flat), 2);
         X_trial = trial_flat(valid_rows, :);
         
-        % Select Features (Crucial: Must match training features)
-        X_trial_selected = X_trial(:, selected_idx);
+        % Select features used during calibration
+        X_trial = X_trial(:, selected_idx);
         
-        true_label = labels(t);
+        y_true = labels(t);
         
-        %% 2. Single Sample Prediction
-        % predict returns: label, score (posterior probabilities)
-        [pred_labels, post_probs] = predict(model, X_trial_selected);
+        % --- B. Single Sample Evaluation ---
+        [pred_ss, scores_ss] = predict(model, X_trial);
         
-        % Calculate Single Sample Accuracy
-        correct_samples = correct_samples + sum(pred_labels == true_label);
-        total_samples = total_samples + length(pred_labels);
+        ss_correct = ss_correct + sum(pred_ss == y_true);
+        ss_total = ss_total + length(pred_ss);
         
-        %% 3. Evidence Accumulation (Simulated Online Control)
-        % We smooth the posterior probabilities over time.
-        % Formula: P(t) = alpha * P(t-1) + (1-alpha) * current_posterior
+        % --- C. Evidence Accumulation (Online Simulation) ---
+        accum_prob = [0.5, 0.5]; % Start neutral (assuming 2 classes)
+        command_sent = false;
+        pred_trial = NaN;
         
-        % Determine column index for the true class in posterior matrix
-        % The 'ClassNames' property tells us which column is which
-        class_names = model.ClassNames;
-        idx_hands_col = find(class_names == class_A);
-        idx_feet_col  = find(class_names == class_B);
+        % Identify column indices for classes in 'scores_ss'
+        % LDA model stores ClassNames. We need to map scores to class A/B.
+        idx_A = find(model.ClassNames == class_A);
+        idx_B = find(model.ClassNames == class_B);
         
-        % Initialize accumulated probability (start neutral at 0.5)
-        accum_prob = [0.5, 0.5]; 
-        
-        command_delivered = false;
-        
-        for i = 1:size(post_probs, 1)
-            current_post = post_probs(i, :);
+        for i = 1:size(scores_ss, 1)
+            curr_prob = scores_ss(i, :);
             
-            % Update evidence
-            accum_prob = accum_alpha * accum_prob + (1 - accum_alpha) * current_post;
+            % Exponential Smoothing
+            accum_prob = alpha * accum_prob + (1 - alpha) * curr_prob;
             
-            % Check Thresholds
-            % If probability of Hands > Threshold
-            if accum_prob(idx_hands_col) >= accum_threshold
-                predicted_trial_class = class_A;
-                command_delivered = true;
-            % If probability of Feet > Threshold
-            elseif accum_prob(idx_feet_col) >= accum_threshold
-                predicted_trial_class = class_B;
-                command_delivered = true;
+            % Check Threshold
+            if accum_prob(idx_A) >= threshold
+                pred_trial = class_A;
+                command_sent = true;
+            elseif accum_prob(idx_B) >= threshold
+                pred_trial = class_B;
+                command_sent = true;
             end
             
-            % If command delivered, record latency and stop integrating
-            if command_delivered
-                if predicted_trial_class == true_label
-                    trial_results(t) = 1; % Correct
-                    
-                    % Calculate time in seconds relative to cue
-                    % i is samples from cue onset
-                    time_sec = i * cfg.spec.wshift; 
-                    command_latencies(end+1) = time_sec;
-                else
-                    trial_results(t) = 0; % Wrong command
-                end
-                break; % Stop trial simulation
+            if command_sent
+                % Record Latency
+                latency = i * cfg.spec.wshift; % Samples * Seconds/Sample
+                trial_latencies(end+1) = latency;
+                break; % Stop trial
             end
         end
         
-        % If trial ends without threshold crossing, it's a "Miss" (0 accuracy)
-        if ~command_delivered
-             trial_results(t) = 0;
+        % --- D. Record Trial Result ---
+        true_labels_list = [true_labels_list; y_true];
+        
+        if command_sent
+            pred_labels_list = [pred_labels_list; pred_trial];
+            if pred_trial == y_true
+                trial_results(t) = 1;
+            else
+                trial_results(t) = 0;
+            end
+        else
+            % Timeout / No decision
+            pred_labels_list = [pred_labels_list; -1]; % -1 indicates Timeout
+            trial_results(t) = 0;
         end
     end
-    
-    %% Compute Final Metrics
-    single_sample_acc = (correct_samples / total_samples) * 100;
-    trial_acc = (sum(trial_results) / n_trials) * 100;
-    avg_latency = mean(command_latencies);
-    
-    %% Report Results
-    fprintf('-------------------------------------------------\n');
-    fprintf('EVALUATION RESULTS (Online Data)\n');
-    fprintf('-------------------------------------------------\n');
-    fprintf('Single Sample Accuracy:  %.2f%%\n', single_sample_acc);
-    fprintf('Trial Accuracy:          %.2f%%\n', trial_acc);
-    fprintf('Avg Time to Command:     %.2f s\n', avg_latency);
-    fprintf('-------------------------------------------------\n');
 
-    %% Save Results
-    results.single_sample_acc = single_sample_acc;
-    results.trial_acc = trial_acc;
-    results.avg_latency = avg_latency;
-    results.latencies = command_latencies;
-    results.trial_results = trial_results;
+    %% 4. Metrics Calculation
+
+    % Accuracy
+    acc_ss = (ss_correct / ss_total) * 100;
+    acc_trial = (sum(trial_results) / n_trials) * 100;
+    avg_latency = mean(trial_latencies);
     
-    % Save to the same directory as the model
+    % Filter out timeouts for Confusion Matrix and Kappa
+    valid_idx = pred_labels_list ~= -1;
+    y_true_valid = true_labels_list(valid_idx);
+    y_pred_valid = pred_labels_list(valid_idx);
+    
+    % Confusion Matrix
+    % Order: Class A, Class B
+    if isempty(y_pred_valid)
+        C = zeros(2);
+    else
+        C = confusionmat(y_true_valid, y_pred_valid, 'Order', [class_A, class_B]);
+    end
+    
+    % Cohen's Kappa
+    % k = (Po - Pe) / (1 - Pe)
+    total_valid = sum(C(:));
+    if total_valid > 0
+        % Observed Agreement (Po)
+        Po = sum(diag(C)) / total_valid;
+        
+        % Expected Agreement (Pe)
+        % Row sums * Col sums / Total^2
+        row_sum = sum(C, 2);
+        col_sum = sum(C, 1);
+        Pe = sum(row_sum .* col_sum') / (total_valid^2);
+        
+        if Pe == 1
+            kappa = 1; % Perfect agreement potential
+        else
+            kappa = (Po - Pe) / (1 - Pe);
+        end
+    else
+        kappa = 0;
+    end
+
+    %% 5. Display and Save
+    fprintf('\n=========================================\n');
+    fprintf('       EVALUATION RESULTS (Online)       \n');
+    fprintf('=========================================\n');
+    fprintf('Single Sample Accuracy:   %.2f%%\n', acc_ss);
+    fprintf('Trial Accuracy:           %.2f%%\n', acc_trial);
+    fprintf('Average Time to Command:  %.2f s\n', avg_latency);
+    fprintf('Cohen''s Kappa:            %.4f\n', kappa);
+    fprintf('\nConfusion Matrix (Rows=True, Cols=Pred):\n');
+    fprintf('\tHands\t\tFeet\n');
+    fprintf('Hands\t%d\t\t%d\n', C(1,1), C(1,2));
+    fprintf('Feet\t%d\t\t%d\n', C(2,1), C(2,2));
+    fprintf('-----------------------------------------\n');
+    fprintf('Note: %d trials timed out (undecided).\n', sum(~valid_idx));
+
+    % Save results structure
+    results.acc_ss = acc_ss;
+    results.acc_trial = acc_trial;
+    results.latency = avg_latency;
+    results.kappa = kappa;
+    results.confusion_matrix = C;
+    
     output_dir = fileparts(model_path);
     save(fullfile(output_dir, 'evaluation_results.mat'), 'results');
 end
