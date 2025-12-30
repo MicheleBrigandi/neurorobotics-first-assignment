@@ -169,11 +169,11 @@ for s = 1:length(subjects)
         if ~exist(activity_off_file, 'file')
             warning('Activity file missing. Skipping visualization.');
         else
-            % A. ERD/ERS Maps (Time-Frequency)
+            % ERD/ERS Maps (Time-Frequency)
             % Generates 'erd_ers_maps.png' in the subject results folder
             visualize_erd_ers(activity_off_file, subj_results_dir, cfg);
             
-            % B. Global Band Power (Bar Charts)
+            % Global Band Power (Bar Charts)
             % Generates 'global_band_power.png' in the subject results folder
             analyze_eeg(activity_off_file, subj_results_dir, cfg);
         end
@@ -186,7 +186,7 @@ end
 if DO_VISUALISATION
     fprintf('\n--- PHASE 5: POPULATION ANALYSIS (GRAND AVERAGE) ---\n');
     
-    % Pass directories explicitly as required by the new function signature
+    % Generates 'grand_average_maps.png' in the results folder
     compute_grand_average(cfg.paths.data_processed, cfg.paths.results, ...
                           cfg.grandaverage.target_filename, cfg);
 end
