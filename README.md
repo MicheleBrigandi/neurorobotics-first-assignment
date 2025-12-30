@@ -1,0 +1,122 @@
+# Neurorobotics - Assignment 1: Motor Imagery BCI Pipeline
+
+## Project Overview
+This repository contains the MATLAB implementation for the first assignment of the Neurorobotics course (2025/2026). The project focuses on the analysis of Electroencephalography (EEG) data collected from 8 healthy subjects during a Motor Imagery (MI) Brain-Computer Interface (BCI) experiment.
+
+The objective is to develop a complete processing pipeline to classify two distinct motor imagery tasks: Both Hands vs. Both Feet. The pipeline includes data organisation, signal preprocessing, feature extraction, classifier training, online evaluation, and metrics visualisation.
+
+## Repository Structure
+The project is organised into a modular structure to ensure flexibility and maintainability.
+```bash
+/
+├── main.m                       # Entry point of the pipeline. Orchestrates all phases.
+├── src/                         # Source code for all processing functions.
+│   ├── organize_dataset.m       # Sorts raw GDF files into Subject/Run-type folders.
+│   ├── convert_gdf2mat.m        # Converts GDF files to MATLAB format.
+│   ├── compute_psd.m            # Computes Power Spectral Density (PSD) and Spectrograms.
+│   ├── extract_trials.m         # Segments full trials (Fixation to Feedback).
+│   ├── select_features.m        # Feature selection using Fisher Score.
+│   ├── train_classifier.m       # Trains the LDA classifier on offline data.
+│   ├── test_classifier.m        # Evaluates the model on online data (Evidence Accumulation).
+│   ├── visualize_erd_ers.m      # Generates Time-Frequency maps for single subjects.
+│   ├── analyze_eeg.m            # Computes global band power (Mu/Beta) per channel.
+│   ├── compute_grand_average.m  # Performs population-level ERD analysis.
+│   └── get_config.m             # Centralised configuration (paths, constants, parameters).
+├── data/                        # Data storage (excluded from version control).
+│   ├── downloads/               # Place raw GDF files here.
+│   ├── raw/                     # Automatically structured raw data.
+│   └── processed/               # Intermediate files (PSD, Activity matrices).
+└── results/                     # Output figures, trained models, and evaluation metrics.
+```
+
+## Prerequisites
+**BioSig Toolbox:** Required for reading GDF files (sload function). Please ensure BioSig is installed and added to your MATLAB path.
+
+## Installation and Setup
+1. **Clone the repository:**
+   ```bash
+   git clone 
+   cd neurorobotics-first-assignment
+   ```
+   
+2. **Download the dataset:** Download the dataset folder and place it into the `data` folder (if not present, create it). Rename the dataset folder as `downloads`.
+
+3. **Configure BioSig:** Ensure the BioSig toolbox is in your MATLAB path to allow GDF reading.
+
+## Usage
+The entire analysis is controlled via the `main.m` script. We have implemented a flag-based system to selectively run specific parts of the pipeline without re-computing previous steps.
+
+1. Open `main.m` in MATLAB.
+
+2. Adjust the **Control Flags** section at the top of the script according to your needs:
+
+   ```Matlab
+   %% CONTROL FLAGS
+   DO_DATA_SETUP     = true;   % Set to true only for the first run to organise folders
+   DO_PREPROCESSING  = true;   % Converts GDFs, computes PSD, and extracts trials
+   DO_TRAINING       = true;   % Runs Fisher Score feature selection and LDA training
+   DO_TESTING        = true;   % Evaluates the model on Online runs
+   DO_VISUALISATION  = true;   % Generates ERD/ERS maps and Power plots
+   ```
+
+3. Run the script.
+
+4. Results (figures and `.mat` files) will be generated in the `results` directory, organised by subject ID.
+
+## Pipeline Description
+
+### 1. Data Organisation & Preprocessing
+
+The raw data is first sorted into a structured hierarchy (`raw/SubjectID/offline` and `raw/SubjectID/online`).
+
+Laplacian Filter: A spatial Laplacian filter (16 channels) is applied to enhance the signal-to-noise ratio.
+
+PSD Computation: Power Spectral Density is computed using a sliding window spectrogram (Window: 0.5s, Shift: 0.0625s).
+
+Trial Extraction: Data is segmented from the Fixation Cross to the end of the Continuous Feedback.
+
+2. Model Calibration (Offline)
+
+Feature Selection: The Fisher Score algorithm is used to select the top discriminant features (Frequency-Channel pairs) from the offline runs.
+
+Classification: A Linear Discriminant Analysis (LDA) classifier is trained on the selected features.
+
+3. Evaluation (Online)
+
+The trained model is tested on the online runs. We implemented an Evidence Accumulation Framework to smooth the posterior probabilities over time, simulating the real-time control strategy used during the experiment. Metrics reported include:
+
+Single Sample Accuracy.
+
+Trial Accuracy.
+
+Average Latency (Time to Command).
+
+Cohen's Kappa.
+
+4. Visualisation
+
+Single Subject: Time-Frequency maps (ERD/ERS) are generated for C3, Cz, and C4 to analyse the desynchronisation in the Mu/Beta bands.
+
+Grand Average: A population-level analysis is performed by aligning and averaging the ERD maps of all subjects to identify common neurophysiological patterns.
+
+Configuration
+All global parameters are centralised in src/get_config.m. You can modify this file to change:
+
+Frequency bands (Mu/Beta).
+
+Spectrogram window settings.
+
+Number of features to select.
+
+Channel mapping and event codes.
+
+Contributors
+As per assignment guidelines, the contributions of each group member are listed below:
+
+[Your Name]: [Specific contributions, e.g., Implementation of Preprocessing and Grand Average, Refactoring of main structure].
+
+Francesco [Surname]: [Specific contributions, e.g., Implementation of Fisher Score, Visualisation scripts, Directory organisation].
+
+[Member 3 Name]: [Specific contributions, e.g., Initial implementation of ERD logic, Literature review].
+
+[Member 4 Name]: [Specific contributions, e.g., Analysis of online results, Report writing].
