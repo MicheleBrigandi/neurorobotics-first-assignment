@@ -35,7 +35,7 @@ The project is organised into a modular structure to ensure flexibility and main
 ## Installation and Setup
 1. **Clone the repository:**
    ```bash
-   git clone 
+   git clone https://github.com/MicheleBrigandi/neurorobotics-first-assignment.git
    cd neurorobotics-first-assignment
    ```
    
@@ -69,11 +69,11 @@ The entire analysis is controlled via the `main.m` script. We have implemented a
 
 The raw data is first sorted into a structured hierarchy (`raw/SubjectID/offline` and `raw/SubjectID/online`).
 
-* **Laplacian Filter:** A spatial Laplacian filter (16 channels) is applied to enhance the signal-to-noise ratio.
+* **Laplacian Filter:** A spatial Laplacian filter (16 channels) is applied to each individual recording to enhance the signal-to-noise ratio.
 
-* **PSD Computation:** Power Spectral Density is computed using a sliding window spectrogram (Window: 0.5s, Shift: 0.0625s).
+* **PSD Computation:** Power Spectral Density is computed independently for every file using a sliding window spectrogram (Window: 0.5s, Shift: 0.0625s).
 
-* **Trial Extraction:** Data is segmented from the **Fixation Cross** to the end of the **Continuous Feedback**.
+* **Trial Extraction and Concatenation:** Trials are segmented from the **Fixation Cross** to the end of the **Continuous Feedback**. Finally, all trials from the same session (offline/online) are concatenated into a single matrix per subject to be used in the training and evaluation parts.
 
 ### 2. Model Calibration (Offline)
 
@@ -92,7 +92,10 @@ The trained model is tested on the online runs. We implemented an **Evidence Acc
 
 ### 4. Visualisation
 
-* **Single Subject:** Time-Frequency maps (ERD/ERS) are generated for C3, Cz, and C4 to analyse the desynchronisation in the Mu/Beta bands.
+* **Single Subject:**
+
+   * **ERD/ERS Maps:** Time-Frequency maps are generated for C3, Cz, and C4 to analyse the desynchronisation in the Mu/Beta bands.
+   * **Global Band Power:** A global spectral analysis is computed to visualise the power distribution across all channels, identifying the regions with the strongest activity in the Mu (8-12 Hz) and Beta (13-30 Hz) bands.
 
 * **Grand Average:** A population-level analysis is performed by aligning and averaging the ERD maps of all subjects to identify common neurophysiological patterns.
 
