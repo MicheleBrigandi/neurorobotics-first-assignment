@@ -6,7 +6,7 @@
 %    0. SETUP:         Automatic organisation of raw GDF files into subject folders
 %    1. PREPROCESSING: GDF -> MAT conversion, Laplacian, PSD, Trial Extraction
 %    2. TRAINING:      Feature Selection (Fisher Score) & Model Training (LDA)
-%    3. EVALUATION:    Online Testing
+%    3. EVALUATION:    Online Testing with Evidence Accumulation
 %    4. VISUALISATION: ERD/ERS Maps and Global Power Analysis
 %
 %  USAGE:
@@ -35,7 +35,7 @@ fprintf('=== BCI PIPELINE INITIALISED ===\n');
 DO_DATA_SETUP     = true;   % Run once to sort downloaded files
 DO_PREPROCESSING  = true;   % Converts GDFs and computes PSD/Activity
 DO_TRAINING       = true;   % Feature Selection + LDA Training
-DO_TESTING        = false;  % (To be implemented)
+DO_TESTING        = true;   % Run Evaluation on Online Data
 DO_VISUALISATION  = false;  % (To be implemented later)
 
 %% 0. SETUP
@@ -153,8 +153,16 @@ for s = 1:length(subjects)
     %% 3. EVALUATION (Online Testing)
     if DO_TESTING
         fprintf('[%s] --- PHASE 3: EVALUATION ---\n', subj_id);
-        % Placeholder for evaluation function
-        % evaluate_performance(activity_on_file, model_file, cfg);
+        
+        % Check if online data and model exist
+        if exist(activity_on_file, 'file') && exist(model_file, 'file')
+            % Run evaluation with Evidence Accumulation
+            test_classifier(activity_on_file, model_file, cfg);
+        else
+            warning('Skipping Evaluation: Missing online activity file or trained model for %s.', subj_id);
+        end
+        
+        fprintf('[%s] Evaluation complete.\n', subj_id);
     end
 
     %% 4. VISUALISATION
