@@ -69,54 +69,48 @@ The entire analysis is controlled via the `main.m` script. We have implemented a
 
 The raw data is first sorted into a structured hierarchy (`raw/SubjectID/offline` and `raw/SubjectID/online`).
 
-Laplacian Filter: A spatial Laplacian filter (16 channels) is applied to enhance the signal-to-noise ratio.
+* **Laplacian Filter:** A spatial Laplacian filter (16 channels) is applied to enhance the signal-to-noise ratio.
 
-PSD Computation: Power Spectral Density is computed using a sliding window spectrogram (Window: 0.5s, Shift: 0.0625s).
+* **PSD Computation:** Power Spectral Density is computed using a sliding window spectrogram (Window: 0.5s, Shift: 0.0625s).
 
-Trial Extraction: Data is segmented from the Fixation Cross to the end of the Continuous Feedback.
+* **Trial Extraction:** Data is segmented from the **Fixation Cross** to the end of the **Continuous Feedback**.
 
-2. Model Calibration (Offline)
+### 2. Model Calibration (Offline)
 
-Feature Selection: The Fisher Score algorithm is used to select the top discriminant features (Frequency-Channel pairs) from the offline runs.
+* **Feature Selection:** The Fisher Score algorithm is used to select the top discriminant features (Frequency-Channel pairs) from the offline runs.
 
-Classification: A Linear Discriminant Analysis (LDA) classifier is trained on the selected features.
+* **Classification:** A Linear Discriminant Analysis (LDA) classifier is trained on the selected features.
 
-3. Evaluation (Online)
+### 3. Evaluation (Online)
 
-The trained model is tested on the online runs. We implemented an Evidence Accumulation Framework to smooth the posterior probabilities over time, simulating the real-time control strategy used during the experiment. Metrics reported include:
+The trained model is tested on the online runs. We implemented an **Evidence Accumulation Framework** to smooth the posterior probabilities over time, simulating the real-time control strategy used during the experiment. Metrics reported include:
 
-Single Sample Accuracy.
+* Single Sample Accuracy.
+* Trial Accuracy.
+* Average Latency (Time to Command).
+* Cohen's Kappa.
 
-Trial Accuracy.
+### 4. Visualisation
 
-Average Latency (Time to Command).
+* **Single Subject:** Time-Frequency maps (ERD/ERS) are generated for C3, Cz, and C4 to analyse the desynchronisation in the Mu/Beta bands.
 
-Cohen's Kappa.
+* **Grand Average:** A population-level analysis is performed by aligning and averaging the ERD maps of all subjects to identify common neurophysiological patterns.
 
-4. Visualisation
+## Configuration
+All global parameters are centralised in `src/get_config.m`. You can modify this file to change:
 
-Single Subject: Time-Frequency maps (ERD/ERS) are generated for C3, Cz, and C4 to analyse the desynchronisation in the Mu/Beta bands.
+* Frequency bands (Mu/Beta).
+* Spectrogram window settings.
+* Number of features to select.
+* Channel mapping and event codes.
 
-Grand Average: A population-level analysis is performed by aligning and averaging the ERD maps of all subjects to identify common neurophysiological patterns.
+## Contributors
+The contributions of each group member are listed below:
 
-Configuration
-All global parameters are centralised in src/get_config.m. You can modify this file to change:
+* **Baggio Davide:** 
 
-Frequency bands (Mu/Beta).
+* **Brigandì Michele:**
 
-Spectrogram window settings.
+* **Campigotto Francesco:**
 
-Number of features to select.
-
-Channel mapping and event codes.
-
-Contributors
-As per assignment guidelines, the contributions of each group member are listed below:
-
-[Your Name]: [Specific contributions, e.g., Implementation of Preprocessing and Grand Average, Refactoring of main structure].
-
-Francesco [Surname]: [Specific contributions, e.g., Implementation of Fisher Score, Visualisation scripts, Directory organisation].
-
-[Member 3 Name]: [Specific contributions, e.g., Initial implementation of ERD logic, Literature review].
-
-[Member 4 Name]: [Specific contributions, e.g., Analysis of online results, Report writing].
+* **Wei Yupeng:**
