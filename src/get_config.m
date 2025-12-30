@@ -10,13 +10,13 @@ function cfg = get_config()
 % USAGE:
 %   cfg = get_config();
 
-    %% DIRECTORY STRUCTURE (Roots)
-    cfg.paths.root           = pwd;
-    cfg.paths.data           = fullfile(cfg.paths.root, 'data');
-    cfg.paths.downloads      = fullfile(cfg.paths.data, 'downloads');
+    %% DIRECTORY STRUCTURE
+    cfg.paths.root      = pwd;
+    cfg.paths.data      = fullfile(cfg.paths.root, 'data');
+    cfg.paths.downloads = fullfile(cfg.paths.data, 'downloads');
     
-    % Root folder for organised raw data (containing subject subfolders)
-    cfg.paths.raw_root       = fullfile(cfg.paths.data, 'raw');
+    % Root folder for organised raw data
+    cfg.paths.raw_root = fullfile(cfg.paths.data, 'raw');
     
     % Root folders for outputs
     cfg.paths.data_processed = fullfile(cfg.paths.data, 'processed');
@@ -35,6 +35,11 @@ function cfg = get_config()
     
     % Number of EEG channels acquired (10-20 international system)
     cfg.n_channels = 16;
+
+    % Channels names mapping (position correponds to index)
+    cfg.channels.names = {'Fz', 'FC3', 'FC1', 'FCz', 'FC2', 'FC4', ...
+                          'C3', 'C1', 'Cz', 'C2', 'C4', ...
+                          'CP3', 'CP1', 'CPz', 'CP2', 'CP4'};
     
     %% SIGNAL PROCESSING (Spectrogram / PSD)
     % These parameters define how the Power Spectral Density (PSD) is computed
@@ -46,14 +51,13 @@ function cfg = get_config()
     % 0.0625 s corresponds to a temporal resolution of 16 Hz
     cfg.spec.wshift = 0.0625;
     
-    % Shift of the internal windows for PSD averaging (Welch's method)
+    % Shift of the internal windows for PSD averaging
     cfg.spec.pshift = 0.25;
     
     % Length of the moving average filter (in seconds)
     cfg.spec.mlength = 1;
     
     % Frequency band of interest (in Hz)
-    % We filter out very low/high freqs to save space and focus on Mu/Beta
     cfg.spec.freq_band = [4 48];
     
     %% EVENT CODES (GDF Standard)
@@ -68,5 +72,9 @@ function cfg = get_config()
     
     % Number of top discriminative features (Frequency-Channel pairs) to select
     % using the Fisher Score algorithm
-    cfg.train.n_features = 10; 
+    cfg.train.n_features = 10;
+
+    %% VISUALISATION PARAMETERS
+    % File used for computing mean ERD/ERS on whole population
+    cfg.grandaverage.target_filename = 'activity_offline.mat';
 end
