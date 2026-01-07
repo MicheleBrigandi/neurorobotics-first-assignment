@@ -19,6 +19,7 @@ function cfg = get_config()
     cfg.paths.raw_root = fullfile(cfg.paths.data, 'raw');
     
     % Root folders for outputs
+    cfg.paths.data_preproc   = fullfile(cfg.paths.data, 'preprocessed');
     cfg.paths.data_processed = fullfile(cfg.paths.data, 'processed');
     cfg.paths.results        = fullfile(cfg.paths.root, 'results');
 
@@ -27,6 +28,7 @@ function cfg = get_config()
     
     % The spatial Laplacian filter mask (provided with the dataset)
     cfg.files.laplacian = fullfile(cfg.paths.data, 'laplacian16.mat');
+    cfg.files.chanlocs = fullfile(cfg.paths.data, 'chanlocs16.mat');
     
     %% ACQUISITION PARAMETERS
     % Sampling rate in Hz.

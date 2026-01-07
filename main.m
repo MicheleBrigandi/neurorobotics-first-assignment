@@ -3,12 +3,12 @@
 %  ========================================================================
 %  
 %  PIPELINE STRUCTURE:
-%    0. SETUP:         Automatic organisation of raw GDF files into subject folders
-%    1. PREPROCESSING: GDF -> MAT conversion, Laplacian, PSD, Trial Extraction
-%    2. TRAINING:      Feature Selection (Fisher Score) & Model Training (LDA)
-%    3. EVALUATION:    Online Testing with Evidence Accumulation
-%    4. VISUALISATION: ERD/ERS Maps and Global Power Analysis (Single Subject)
-%    5. POPULATION:    Grand Average Analysis
+%    0. SETUP:            Automatic organisation of raw GDF files into subject folders
+%    1. PREPROCESSING:    GDF -> MAT conversion, Laplacian, PSD, Trial Extraction
+%    2. FEATURE ANALYSIS: ERD and Fisher score are computed
+%    2. TRAINING:         Feature Selection (Fisher Score) & Model Training (LDA)
+%    3. EVALUATION:       Online Testing with Evidence Accumulation
+%    4. VISUALISATION:    ERD/ERS Maps and Global Power Analysis (Single Subject)
 %
 %  USAGE:
 %    Set the boolean flags below to 'true' or 'false' to control which
@@ -33,11 +33,12 @@ fprintf('=== BCI PIPELINE INITIALISED ===\n');
 
 %% CONTROL FLAGS
 % Toggle these flags to run specific parts of the pipeline
-DO_DATA_SETUP     = true;   % Run once to sort downloaded files
-DO_PREPROCESSING  = true;   % Converts GDFs and computes PSD/Activity
-DO_TRAINING       = true;   % Feature Selection + LDA Training
-DO_TESTING        = true;   % Run Evaluation on Online Data
-DO_VISUALISATION  = true;   % Generates ERD maps and Band Power plots
+DO_DATA_SETUP       = true;
+DO_PREPROCESSING    = true;  
+DO_FEATURE_ANALYSIS = true;
+DO_TRAINING         = true;
+DO_TESTING          = true;
+DO_VISUALIZATION    = true;
 
 %% 0. SETUP
 if DO_DATA_SETUP
@@ -73,7 +74,92 @@ end
 
 fprintf('\nFound %d subjects: %s\n', length(subjects), strjoin({subjects.name}, ', '));
 
-%% MAIN SUBJECT LOOP
+all_stats = [];  
+ga_h = []; ga_f = []; ga_fs = []; ga_ch = []; ga_cf = [];
+
+%% 1. PREPROCESSING
+fprintf('\n=== PHASE 1: PREPROCESSING ===\n');
+
+for s = 1:length(subjects)
+    subj_id = subjects(s).name;
+    subj_dir = fullfile(raw_root, subj_id); 
+
+    prep_dir = fullfile(cfg.paths.root, 'data', 'preprocessed', subj_id);
+
+    clean_id = strrep(subj_id, '_micontinuous', ''); 
+    fprintf('PROCESSING: %s (%s)\n', clean_id, subj_id);
+    
+    run_types = {'offline', 'online'};
+    for t = 1:2
+        type = run_types{t}; 
+        current_save_path = fullfile(prep_dir, ['activity_', type, '.mat']);
+        
+        % preprocessing
+        if DO_PREPROCESSING
+            process_and_concatenate_integrated(subj_dir, subj_id, type, current_save_path, cfg);
+        end
+        
+        % 2. compute features
+        if DO_FEATURE_ANALYSIS
+            stats = compute_stats(current_save_path, cfg);
+    
+            if ~isempty(stats)
+                stats.id   = clean_id; 
+                stats.type = type;
+                stats.tag  = '';  
+                
+                visualize_features(stats, cfg);    
+               
+                
+                if strcmp(type, 'offline')
+                    all_stats = [all_stats; stats]; 
+                    ga_h  = [ga_h, stats.hands_map];
+                    ga_f  = [ga_f, stats.feet_map];
+                    ga_fs = cat(3, ga_fs, stats.full_data.fisher_map);
+                    ga_ch = [ga_ch, stats.curve_h];
+                    ga_cf = [ga_cf, stats.curve_f];         
+                end
+            end
+        end
+    end
+end
+
+%% 2. FEATURE ANALYSIS
+fprintf('\n=== PHASE 2: FEATURE ANALYSIS ===\n');
+
+if DO_FEATURE_ANALYSIS && ~isempty(all_stats)
+    % Ranking by Max Fisher Score
+    [~, sort_idx] = sort([all_stats.maxFS], 'descend');
+    
+    % Selecting the best 2 and worst 1 subject
+    top_2_idx = sort_idx(1:min(2, length(sort_idx)));
+    bottom_1_idx = sort_idx(end);
+    selected_indices = unique([top_2_idx, bottom_1_idx]);
+    
+    % Print
+    print_metrics(all_stats, selected_indices);
+    
+    % Visualization-population
+    visualize_features(all_stats(1), cfg, all_stats); 
+    
+
+    ga.id = 'GrandAverage'; 
+    ga.type = 'Offline';
+    ga.hands_map = mean(ga_h, 2);
+    ga.feet_map  = mean(ga_f, 2);
+    ga.full_data.fisher_map = mean(ga_fs, 3);
+    ga.curve_h = mean(ga_ch, 2);
+    ga.curve_f = mean(ga_cf, 2);
+    ga.t_axis  = all_stats(1).t_axis;
+    
+
+    visualize_features(ga, cfg);
+    
+    fprintf('Section 2 Complete\n');
+else
+    fprintf('Section 2 failed\n');
+end
+
 for s = 1:length(subjects)
     subj_id = subjects(s).name;
     
@@ -81,23 +167,12 @@ for s = 1:length(subjects)
     fprintf('PROCESSING SUBJECT: %s (%d/%d)\n', subj_id, s, length(subjects));
     fprintf('-------------------------------------------------\n');
     
-    % Define subject-specific paths
-    % Input raw directories
-    raw_off_dir = fullfile(raw_root, subj_id, 'offline');
-    raw_on_dir  = fullfile(raw_root, subj_id, 'online');
-    
     % Intermediate processed directories
-    subj_proc_dir = fullfile(cfg.paths.data_processed, subj_id);
-    
-    temp_off_dir = fullfile(subj_proc_dir, 'temp_raw_offline');
-    temp_on_dir  = fullfile(subj_proc_dir, 'temp_raw_online');
-    
-    psd_off_dir  = fullfile(subj_proc_dir, 'psd_offline');
-    psd_on_dir   = fullfile(subj_proc_dir, 'psd_online');
+    subj_preproc_dir = fullfile(cfg.paths.data_preproc, subj_id);
     
     % Final aggregated files
-    activity_off_file = fullfile(subj_proc_dir, 'activity_offline.mat');
-    activity_on_file  = fullfile(subj_proc_dir, 'activity_online.mat');
+    activity_off_file = fullfile(subj_preproc_dir, 'activity_offline.mat');
+    activity_on_file  = fullfile(subj_preproc_dir, 'activity_online.mat');
     
     % Results/Models
     subj_results_dir = fullfile(cfg.paths.results, subj_id);
@@ -109,28 +184,9 @@ for s = 1:length(subjects)
         mkdir(subj_results_dir); 
     end
 
-    %% 1. PREPROCESSING
-    if DO_PREPROCESSING
-        fprintf('[%s] --- PHASE 1: PREPROCESSING ---\n', subj_id);
-        
-        % Convert GDF to MAT
-        convert_gdf2mat(raw_off_dir, temp_off_dir);
-        convert_gdf2mat(raw_on_dir,  temp_on_dir);
-        
-        % Compute PSD
-        compute_psd(temp_off_dir, psd_off_dir, cfg.files.laplacian, cfg);
-        compute_psd(temp_on_dir,  psd_on_dir,  cfg.files.laplacian, cfg);
-        
-        % Trial extraction and concatenation
-        extract_trials(psd_off_dir, activity_off_file, cfg);
-        extract_trials(psd_on_dir,  activity_on_file,  cfg);
-        
-        fprintf('[%s] Preprocessing complete.\n', subj_id);
-    end
-    
-    %% 2. MODEL CALIBRATION
+    %% 3. TRAINING
     if DO_TRAINING
-        fprintf('[%s] --- PHASE 2: TRAINING ---\n', subj_id);
+        fprintf('[%s] --- PHASE 3: TRAINING ---\n', subj_id);
         
         if ~exist(activity_off_file, 'file')
             warning('Offline activity file missing for %s. Skipping training.', subj_id);
@@ -146,9 +202,9 @@ for s = 1:length(subjects)
         fprintf('[%s] Training complete. Model saved.\n', subj_id);
     end
     
-    %% 3. EVALUATION (Online Testing)
+    %% 4. EVALUATION (Online Testing)
     if DO_TESTING
-        fprintf('[%s] --- PHASE 3: EVALUATION ---\n', subj_id);
+        fprintf('[%s] --- PHASE 4: EVALUATION ---\n', subj_id);
         
         if ~exist(activity_on_file, 'file')
             warning('[%s] Online activity file not found. Skipping evaluation.', subj_id);
@@ -162,9 +218,9 @@ for s = 1:length(subjects)
         fprintf('[%s] Evaluation complete.\n', subj_id);
     end
 
-    %% 4. VISUALISATION (Single Subject)
-    if DO_VISUALISATION
-        fprintf('[%s] --- PHASE 4: VISUALISATION ---\n', subj_id);
+    %% 5. VISUALIZATION (Single Subject)
+    if DO_VISUALIZATION
+        fprintf('[%s] --- PHASE 5: VISUALISATION ---\n', subj_id);
         
         if ~exist(activity_off_file, 'file')
             warning('Activity file missing. Skipping visualization.');
@@ -179,16 +235,6 @@ for s = 1:length(subjects)
         end
     end
     
-end
-
-%% 5. POPULATION ANALYSIS
-% Runs once after all subjects are processed
-if DO_VISUALISATION
-    fprintf('\n--- PHASE 5: POPULATION ANALYSIS (GRAND AVERAGE) ---\n');
-    
-    % Generates 'grand_average_maps.png' in the results folder
-    compute_grand_average(cfg.paths.data_processed, cfg.paths.results, ...
-                          cfg.grandaverage.target_filename, cfg);
 end
 
 fprintf('\n=== PIPELINE EXECUTION FINISHED ===\n');
