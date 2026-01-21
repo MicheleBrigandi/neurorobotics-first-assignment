@@ -44,9 +44,9 @@ end
 fprintf('=== BCI PIPELINE INITIALISED ===\n');
 
 %% CONTROL FLAGS
-DO_SETUP        = false;  % Organize raw files
-DO_PREPROC      = false;  % Convert and extract trials
-DO_ANALYSIS     = false;  % Compute stats & visualization
+DO_SETUP        = true;  % Organize raw files
+DO_PREPROC      = true;  % Convert and extract trials
+DO_ANALYSIS     = true;  % Compute stats & visualization
 DO_TRAINING     = true;  % Train LDA model
 DO_TESTING      = true;  % Test on online data
 
