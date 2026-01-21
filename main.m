@@ -1,148 +1,164 @@
 %% ========================================================================
-%  BCI PIPELINE: MOTOR IMAGERY CLASSIFICATION
+%  BCI PIPELINE: MOTOR IMAGERY CLASSIFICATION (UNIFIED COMPACT MAIN)
 %  ========================================================================
 %  
-%  PIPELINE STRUCTURE:
-%    0. SETUP:            Automatic organisation of raw GDF files into subject folders
-%    1. PREPROCESSING:    GDF -> MAT conversion, Laplacian, PSD, Trial Extraction
-%    2. FEATURE ANALYSIS: ERD and Fisher score are computed
-%    2. TRAINING:         Feature Selection (Fisher Score) & Model Training (LDA)
-%    3. EVALUATION:       Online Testing with Evidence Accumulation
-%    4. VISUALISATION:    ERD/ERS Maps and Global Power Analysis (Single Subject)
+%  This script combines the clean, single-loop structure of the original
+%  Project A with the advanced modular functions and population analysis
+%  of Project B.
 %
-%  USAGE:
-%    Set the boolean flags below to 'true' or 'false' to control which
-%    phases of the pipeline are executed.
+%  STRUCTURE:
+%    0. SETUP: Automatic dataset organisation
+%    1. MAIN LOOP (Per Subject):
+%       - Preprocessing (GDF -> MAT -> Activity)
+%       - Feature Analysis (Stats, ERD, Fisher Score)
+%       - Training (LDA)
+%       - Testing (Online Evaluation)
+%       - Visualisation
+%    2. POST-PROCESSING:
+%       - Population Grand Average
+%       - Metrics Printing
+%
 %  ========================================================================
 
 %% INITIALISATION
 clear; clc; close all;
 
-% Add source and data directories to the MATLAB path
+% Add source and data directories
 addpath(genpath('src')); 
 addpath(genpath('data')); 
 
-% Load the centralised configuration structure
+% Optional: Add EEGLAB if available (for topoplots)
+% Adjust this path if necessary or keep it generic
+eeglab_path = 'C:\Users\Utente\Desktop\neurorobotics\toolboxes\eeglab';
+if exist(eeglab_path, 'dir')
+    addpath(genpath(eeglab_path));
+end
+
+% Load Configuration
 if exist('get_config', 'file')
     cfg = get_config();
 else
-    error('Configuration file "get_config.m" not found. Please check directory structure.');
+    error('Configuration file "get_config.m" not found.');
 end
 
 fprintf('=== BCI PIPELINE INITIALISED ===\n');
 
 %% CONTROL FLAGS
-% Toggle these flags to run specific parts of the pipeline
-DO_DATA_SETUP       = true;
-DO_PREPROCESSING    = true;  
-DO_FEATURE_ANALYSIS = true;
-DO_TRAINING         = true;
-DO_TESTING          = true;
-DO_VISUALIZATION    = true;
+DO_SETUP        = true;  % Organize raw files
+DO_PREPROC      = true;  % Convert and extract trials
+DO_ANALYSIS     = true;  % Compute stats & visualization
+DO_TRAINING     = true;  % Train LDA model
+DO_TESTING      = true;  % Test on online data
 
 %% 0. SETUP
-if DO_DATA_SETUP
+if DO_SETUP
     fprintf('\n=== PHASE 0: DATASET ORGANISATION ===\n');
-    
-    % Define where raw data should be stored
-    raw_data_root = fullfile(cfg.paths.data, 'raw');
-    
-    % Check if downloads folder exists
     if exist(cfg.paths.downloads, 'dir')
-        fprintf('Organising dataset from: %s\n', cfg.paths.downloads);
-        organize_dataset(cfg.paths.downloads, raw_data_root);
+        organize_dataset(cfg.paths.downloads, fullfile(cfg.paths.data, 'raw'));
     else
-        warning('Downloads folder not found at %s. Assuming data is already in %s.', ...
-                cfg.paths.downloads, raw_data_root);
+        warning('Downloads folder not found. Assuming data is already in data/raw.');
     end
 end
 
 %% SUBJECT DISCOVERY
-% Scan the 'raw' folder to find all subjects automatically
 raw_root = fullfile(cfg.paths.data, 'raw');
-if ~exist(raw_root, 'dir')
-    error('Raw data folder not found. Run SETUP phase first.');
-end
+if ~exist(raw_root, 'dir'), error('Raw data folder not found.'); end
 
 dir_content = dir(raw_root);
-% Filter out dots and non-folders to get subject list
 subjects = dir_content([dir_content.isdir] & ~startsWith({dir_content.name}, '.'));
 
-if isempty(subjects)
-    error('No subjects found in %s.', raw_root);
-end
+if isempty(subjects), error('No subjects found.'); end
 
-fprintf('\nFound %d subjects: %s\n', length(subjects), strjoin({subjects.name}, ', '));
-
+% Accumulators for Population Analysis (Grand Average)
 all_stats = [];  
 ga_h = []; ga_f = []; ga_fs = []; ga_ch = []; ga_cf = [];
 
-%% 1. PREPROCESSING
-fprintf('\n=== PHASE 1: PREPROCESSING ===\n');
+%% MAIN LOOP
+fprintf('\n=== STARTING PROCESSING LOOP (%d Subjects) ===\n', length(subjects));
 
 for s = 1:length(subjects)
     subj_id = subjects(s).name;
-    subj_dir = fullfile(raw_root, subj_id); 
-
-    prep_dir = fullfile(cfg.paths.root, 'data', 'preprocessed', subj_id);
-
-    clean_id = strrep(subj_id, '_micontinuous', ''); 
-    fprintf('PROCESSING: %s (%s)\n', clean_id, subj_id);
+    clean_id = strrep(subj_id, '_micontinuous', '');
     
-    run_types = {'offline', 'online'};
-    for t = 1:2
-        type = run_types{t}; 
-        current_save_path = fullfile(prep_dir, ['activity_', type, '.mat']);
-        
-        % preprocessing
-        if DO_PREPROCESSING
-            process_and_concatenate_integrated(subj_dir, subj_id, type, current_save_path, cfg);
-        end
-        
-        % 2. compute features
-        if DO_FEATURE_ANALYSIS
-            stats = compute_stats(current_save_path, cfg);
+    fprintf('\n-------------------------------------------------\n');
+    fprintf('PROCESSING SUBJECT: %s (%d/%d)\n', clean_id, s, length(subjects));
+    fprintf('-------------------------------------------------\n');
+
+    % --- Define Paths ---
+    subj_raw_dir  = fullfile(raw_root, subj_id);
+    subj_prep_dir = fullfile(cfg.paths.data_preproc, subj_id);
+    subj_res_dir  = fullfile(cfg.paths.results, subj_id);
     
-            if ~isempty(stats)
-                stats.id   = clean_id; 
-                stats.type = type;
-                stats.tag  = '';  
-                
-                visualize_features(stats, cfg);    
-               
-                
-                if strcmp(type, 'offline')
-                    all_stats = [all_stats; stats]; 
-                    ga_h  = [ga_h, stats.hands_map];
-                    ga_f  = [ga_f, stats.feet_map];
-                    ga_fs = cat(3, ga_fs, stats.full_data.fisher_map);
-                    ga_ch = [ga_ch, stats.curve_h];
-                    ga_cf = [ga_cf, stats.curve_f];         
-                end
-            end
+    if ~exist(subj_res_dir, 'dir'), mkdir(subj_res_dir); end
+    
+    file_act_off = fullfile(subj_prep_dir, 'activity_offline.mat');
+    file_act_on  = fullfile(subj_prep_dir, 'activity_online.mat');
+    file_fisher  = fullfile(subj_res_dir, 'fisher_results.mat');
+    file_model   = fullfile(subj_res_dir, 'classifier_model.mat');
+
+    % --- 1. PREPROCESSING (Offline & Online) ---
+    if DO_PREPROC
+        process_and_concatenate_integrated(subj_raw_dir, subj_id, 'offline', file_act_off, cfg);
+        process_and_concatenate_integrated(subj_raw_dir, subj_id, 'online', file_act_on, cfg);
+    end
+
+    % --- 2. FEATURE ANALYSIS & STATS ---
+    if DO_ANALYSIS && exist(file_act_off, 'file')
+        % Compute stats for this subject
+        stats = compute_stats(file_act_off, cfg);
+        
+        if ~isempty(stats)
+            stats.id = clean_id; 
+            stats.type = 'offline';
+            
+            % Generate Single Subject Visualizations (Project B style)
+            visualize_features(stats, cfg);
+            
+            % Additional Legacy Visualizations (ERD Maps / Band Power)
+            visualize_erd_ers(file_act_off, subj_res_dir, cfg);
+            analyze_eeg(file_act_off, subj_res_dir, cfg);
+            
+            % Accumulate data for Grand Average
+            all_stats = [all_stats; stats]; 
+            ga_h  = [ga_h, stats.hands_map];
+            ga_f  = [ga_f, stats.feet_map];
+            ga_fs = cat(3, ga_fs, stats.full_data.fisher_map);
+            ga_ch = [ga_ch, stats.curve_h];
+            ga_cf = [ga_cf, stats.curve_f]; 
         end
+    end
+
+    % --- 3. TRAINING (Offline) ---
+    if DO_TRAINING && exist(file_act_off, 'file')
+        select_features(file_act_off, file_fisher, cfg);
+        train_classifier(file_act_off, file_fisher, file_model, cfg);
+    end
+
+    % --- 4. TESTING (Online) ---
+    if DO_TESTING && exist(file_act_on, 'file') && exist(file_model, 'file')
+        test_classifier(file_act_on, file_model, cfg);
     end
 end
 
-%% 2. FEATURE ANALYSIS
-fprintf('\n=== PHASE 2: FEATURE ANALYSIS ===\n');
-
-if DO_FEATURE_ANALYSIS && ~isempty(all_stats)
-    % Ranking by Max Fisher Score
-    [~, sort_idx] = sort([all_stats.maxFS], 'descend');
+%% POST-PROCESSING: POPULATION ANALYSIS (Grand Average)
+if DO_ANALYSIS && ~isempty(all_stats)
+    fprintf('\n=== POPULATION ANALYSIS (GRAND AVERAGE) ===\n');
     
-    % Selecting the best 2 and worst 1 subject
-    top_2_idx = sort_idx(1:min(2, length(sort_idx)));
-    bottom_1_idx = sort_idx(end);
-    selected_indices = unique([top_2_idx, bottom_1_idx]);
+    % 1. Print Comparative Metrics
+    try
+        [~, sort_idx] = sort([all_stats.maxFS], 'descend');
+        % Select Best 2 and Worst 1 for highlight
+        if length(sort_idx) >= 3
+            selected_indices = unique([sort_idx(1:min(2, end)), sort_idx(end)]);
+        else
+            selected_indices = sort_idx;
+        end
+        print_metrics(all_stats, selected_indices);
+    catch
+        warning('Could not print sorted metrics (not enough subjects?).');
+    end
     
-    % Print
-    print_metrics(all_stats, selected_indices);
-    
-    % Visualization-population
-    visualize_features(all_stats(1), cfg, all_stats); 
-    
-
+    % 2. Compute Grand Average (Mean across subjects)
     ga.id = 'GrandAverage'; 
     ga.type = 'Offline';
     ga.hands_map = mean(ga_h, 2);
@@ -150,91 +166,12 @@ if DO_FEATURE_ANALYSIS && ~isempty(all_stats)
     ga.full_data.fisher_map = mean(ga_fs, 3);
     ga.curve_h = mean(ga_ch, 2);
     ga.curve_f = mean(ga_cf, 2);
-    ga.t_axis  = all_stats(1).t_axis;
+    ga.t_axis  = all_stats(1).t_axis; % Assuming time axis is consistent
     
-
+    % 3. Visualize Grand Average
     visualize_features(ga, cfg);
     
-    fprintf('Section 2 Complete\n');
-else
-    fprintf('Section 2 failed\n');
-end
-
-for s = 1:length(subjects)
-    subj_id = subjects(s).name;
-    
-    fprintf('\n-------------------------------------------------\n');
-    fprintf('PROCESSING SUBJECT: %s (%d/%d)\n', subj_id, s, length(subjects));
-    fprintf('-------------------------------------------------\n');
-    
-    % Intermediate processed directories
-    subj_preproc_dir = fullfile(cfg.paths.data_preproc, subj_id);
-    
-    % Final aggregated files
-    activity_off_file = fullfile(subj_preproc_dir, 'activity_offline.mat');
-    activity_on_file  = fullfile(subj_preproc_dir, 'activity_online.mat');
-    
-    % Results/Models
-    subj_results_dir = fullfile(cfg.paths.results, subj_id);
-    fisher_file      = fullfile(subj_results_dir, 'fisher_results.mat');
-    model_file       = fullfile(subj_results_dir, 'classifier_model.mat');
-    
-    % Ensure results directory exists
-    if ~exist(subj_results_dir, 'dir')
-        mkdir(subj_results_dir); 
-    end
-
-    %% 3. TRAINING
-    if DO_TRAINING
-        fprintf('[%s] --- PHASE 3: TRAINING ---\n', subj_id);
-        
-        if ~exist(activity_off_file, 'file')
-            warning('Offline activity file missing for %s. Skipping training.', subj_id);
-            continue;
-        end
-        
-        % Feature Selection (Fisher Score)
-        select_features(activity_off_file, fisher_file, cfg);
-        
-        % Classifier Training (LDA)
-        train_classifier(activity_off_file, fisher_file, model_file, cfg);
-        
-        fprintf('[%s] Training complete. Model saved.\n', subj_id);
-    end
-    
-    %% 4. EVALUATION (Online Testing)
-    if DO_TESTING
-        fprintf('[%s] --- PHASE 4: EVALUATION ---\n', subj_id);
-        
-        if ~exist(activity_on_file, 'file')
-            warning('[%s] Online activity file not found. Skipping evaluation.', subj_id);
-        elseif ~exist(model_file, 'file')
-            warning('[%s] Model file not found. Skipping evaluation.', subj_id);
-        else
-            % Evaluate the classifier on online data
-            test_classifier(activity_on_file, model_file, cfg);
-        end
-        
-        fprintf('[%s] Evaluation complete.\n', subj_id);
-    end
-
-    %% 5. VISUALIZATION (Single Subject)
-    if DO_VISUALIZATION
-        fprintf('[%s] --- PHASE 5: VISUALISATION ---\n', subj_id);
-        
-        if ~exist(activity_off_file, 'file')
-            warning('Activity file missing. Skipping visualization.');
-        else
-            % ERD/ERS Maps (Time-Frequency)
-            % Generates 'erd_ers_maps.png' in the subject results folder
-            visualize_erd_ers(activity_off_file, subj_results_dir, cfg);
-            
-            % Global Band Power (Bar Charts)
-            % Generates 'global_band_power.png' in the subject results folder
-            analyze_eeg(activity_off_file, subj_results_dir, cfg);
-        end
-    end
-    
+    fprintf('Grand Average computed and saved to Results folder.\n');
 end
 
 fprintf('\n=== PIPELINE EXECUTION FINISHED ===\n');

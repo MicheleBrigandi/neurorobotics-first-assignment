@@ -62,6 +62,9 @@ function cfg = get_config()
     % Frequency band of interest (in Hz)
     cfg.spec.freq_band = [4 48];
     
+    % Standard Frequency Bands (Centralized Definition)
+    cfg.bands.mu   = [8 13];
+    
     %% EVENT CODES (GDF Standard)
     % Hex codes converted to decimal
     cfg.codes.fix      = 786; % 0x0312: Fixation Cross
