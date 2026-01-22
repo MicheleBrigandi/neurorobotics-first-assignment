@@ -17,8 +17,6 @@ function model = train_classifier(activity_path, fisher_path, output_model_path,
     if nargin < 4
         error('[train_classifier] Not enough input arguments.');
     end
-
-    fprintf('[train_classifier] Loading data from: %s\n', activity_path);
     
     if ~exist(activity_path, 'file') || ~exist(fisher_path, 'file')
         error('[train_classifier] Input files missing. Run feature selection first.');
@@ -72,7 +70,6 @@ function model = train_classifier(activity_path, fisher_path, output_model_path,
     fprintf('[train_classifier] Training set: %d samples, %d features.\n', size(X_train, 1), length(selected_idx));
 
     %% Model Training (LDA)
-    fprintf('[train_classifier] Training LDA model...\n');
     t_start = tic;
     
     model = fitcdiscr(X_train, y_train, 'DiscrimType', 'linear');
@@ -128,5 +125,4 @@ function model = train_classifier(activity_path, fisher_path, output_model_path,
 
     % Save model
     save(output_model_path, 'model', 'selected_idx', 'acc_overall', 'acc_hands', 'acc_feet');
-    fprintf('[train_classifier] Model and plots saved to: %s\n', output_dir);
 end

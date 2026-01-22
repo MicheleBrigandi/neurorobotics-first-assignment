@@ -37,8 +37,6 @@ function select_features(input_filepath, output_filepath, cfg)
         error('[select_features] Invalid cfg structure. Ensure .codes.hands and .codes.feet exist.');
     end
 
-    fprintf('[select_features] Loading: %s\n', input_filepath);
-    
     % Load data
     data_in = load(input_filepath);
     
@@ -57,9 +55,6 @@ function select_features(input_filepath, output_filepath, cfg)
     chanlabs = data_in.chanlabs;
 
     %% Feature Extraction 
-    
-    fprintf('[select_features] Extracting active phase and averaging...\n');
-    
     [~, n_freq, n_chan, n_trials] = size(Activity);
     
     % Initialize feature matrix: [Trials x Freq x Chan]
@@ -81,8 +76,6 @@ function select_features(input_filepath, output_filepath, cfg)
     X = reshape(permute(feat_FC_T, [3 1 2]), n_trials, n_total_features);
 
     %% Compute Fisher Score
-    fprintf('[select_features] Calculating Fisher Score...\n');
-    
     scores = calculate_fisher_score(X, labels, class_A, class_B);
     
     % Handle potential NaNs
@@ -149,8 +142,6 @@ function select_features(input_filepath, output_filepath, cfg)
     saveas(fig, img_filepath);
     close(fig);
     
-    fprintf('[select_features] Visualisation saved to: %s\n', img_filepath);
-
     %% Saving Results
     output_dir = fileparts(output_filepath);
     if ~exist(output_dir, 'dir'), mkdir(output_dir); end
@@ -167,7 +158,6 @@ function select_features(input_filepath, output_filepath, cfg)
      
     fprintf('[select_features] Top %d features selected. Mean Score: %.4f\n', ...
             length(best_features_idx), mean(sorted_scores(1:length(best_features_idx))));
-    fprintf('[select_features] Saved to: %s\n', output_filepath);
 end
 
 %% Helper Function
@@ -192,6 +182,5 @@ function fs = calculate_fisher_score(X, y, classA, classB)
     varA = var(XA, 0, 1);
     varB = var(XB, 0, 1);
     
-    eps0 = 1e-12; 
-    fs = (muA - muB).^2 ./ (varA + varB + eps0);
+    fs = (muA - muB).^2 ./ (varA + varB);
 end

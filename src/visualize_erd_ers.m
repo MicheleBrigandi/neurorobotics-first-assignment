@@ -19,7 +19,6 @@ function visualize_erd_ers(activity_path, output_dir, cfg)
     if ~exist(output_dir, 'dir')
         mkdir(output_dir); 
     end
-    fprintf('[visualize_erd_ers] Processing data from: %s\n', activity_path);
     
     % Load processed variables
     data = load(activity_path);
@@ -133,6 +132,4 @@ function visualize_erd_ers(activity_path, output_dir, cfg)
     output_filename = fullfile(output_dir, 'erd_ers_maps.png');
     saveas(fig, output_filename);
     close(fig);
-    
-    fprintf('[visualize_erd_ers] Visualisation saved to: %s\n', output_filename);
 end

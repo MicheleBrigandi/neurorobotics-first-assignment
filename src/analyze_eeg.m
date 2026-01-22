@@ -18,7 +18,6 @@ function analyze_eeg(activity_path, output_dir, cfg)
     if ~exist(output_dir, 'dir') 
         mkdir(output_dir); 
     end
-    fprintf('[analyze_eeg] Analysing band power for: %s\n', activity_path);
     
     % Load Data
     data = load(activity_path);
@@ -86,5 +85,4 @@ function analyze_eeg(activity_path, output_dir, cfg)
     saveas(fig, out_file);
     close(fig);
     
-    fprintf('[analyze_eeg] Plot saved to: %s\n', out_file);
 end

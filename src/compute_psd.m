@@ -42,8 +42,6 @@ function compute_psd(input_dir, output_dir, laplacian_path, cfg)
         filename = files(i).name;
         full_path = fullfile(input_dir, filename);
         
-        fprintf('[compute_psd] Processing: %s ...\n', filename);
-        
         try
             % Load raw data
             tmp = load(full_path); 
@@ -99,6 +97,4 @@ function compute_psd(input_dir, output_dir, laplacian_path, cfg)
             fprintf('[compute_psd] Error processing %s: %s\n', filename, ME.message);
         end
     end
-
-    fprintf('[compute_psd] PSD computation completed.\n');
 end

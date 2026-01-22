@@ -35,6 +35,7 @@ function extract_trials(input_dir, output_filepath, cfg)
     %% Processing Loop
     total_valid_trials = 0;
     
+    %% CONCATENATION
     for i = 1:length(files)
         filepath = fullfile(input_dir, files(i).name);
         tmp = load(filepath); 
@@ -124,6 +125,4 @@ function extract_trials(input_dir, output_filepath, cfg)
     chanlabs = tmp.chanlabs;
     
     save(output_filepath, 'Activity', 'all_trials_labels', 'all_cue_onsets', 'freqs', 'chanlabs', 'cfg');
-    
-    fprintf('[extract_trials] Saved %d trials to %s\n', total_valid_trials, output_filepath);
 end

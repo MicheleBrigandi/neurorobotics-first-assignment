@@ -51,8 +51,6 @@ function convert_gdf2mat(input_dir, output_dir)
         filename = gdf_files(i).name;
         full_path = fullfile(gdf_files(i).folder, filename);
         
-        fprintf('[convert_gdf2mat] Converting file %d/%d: %s ...\n', i, length(gdf_files), filename);
-        
         try
             % Load data
             [s, h] = sload(full_path);
@@ -90,6 +88,4 @@ function convert_gdf2mat(input_dir, output_dir)
              fprintf('\n[convert_gdf2mat] Failed to convert %s. Error: %s\n', filename, ME.message);
         end
     end
-
-    fprintf('[convert_gdf2mat] Conversion completed.\n');
 end

@@ -19,8 +19,7 @@ function test_classifier(activity_path, model_path, cfg)
     if nargin < 3
         error('[test_classifier] Error: Not enough input arguments.');
     end
-
-    fprintf('[test_classifier] Loading data: %s\n', activity_path);
+    
     if ~exist(activity_path, 'file') || ~exist(model_path, 'file')
         error('[test_classifier] Input files not found.');
     end

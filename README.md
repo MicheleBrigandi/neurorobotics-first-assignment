@@ -24,9 +24,8 @@ The project is organised into a modular structure to ensure flexibility and main
 │   ├── test_classifier.m                    # Evaluates the model on online data (Evidence Accumulation).
 │   ├── visualize_erd_ers.m                  # Generates Time-Frequency maps for single subjects.
 │   ├── analyze_eeg.m                        # Computes global band power (Mu/Beta) per channel.
-│   ├── compute_grand_average.m              # Performs population-level ERD analysis.
 │   ├── print_metrics.m                      # Prints the Grand Average metrics.
-│   ├── process_and_concatenate_integrated.m # Extracts trials and compute the 4D activity matrix.
+│   ├── preprocessing.m                      # Extracts trials and compute the 4D activity matrix.
 │   ├── visualize_features.m                 # Generate images of the preprocessed data.
 │   └── get_config.m                         # Centralised configuration (paths, constants, parameters).
 ├── data/                                    # Data storage (excluded from version control).
@@ -105,9 +104,12 @@ The trained model is tested on the online runs. We implemented an **Evidence Acc
 - **Single Subject:**
 
   - **ERD/ERS Maps:** Time-Frequency maps are generated for C3, Cz, and C4 to analyse the desynchronisation in the Mu/Beta bands.
-  - **Global Band Power:** A global spectral analysis is computed to visualise the power distribution across all channels, identifying the regions with the strongest activity in the Mu (8-12 Hz) and Beta (13-30 Hz) bands.
+  - **Global Band Power:** A global spectral analysis is computed to visualise the power distribution across all channels, identifying the regions with the strongest activity in the Mu (8-13 Hz) and Beta (13-30 Hz) bands.
+  - **Topoplot:** Topoplot visualization of both hands ERD, feet ERD, and Fisher score
+  - **Spectrogram:** Spectrogram of the fisher score results.
+  - **Training Results:** Training accuracy bars and training confusion matrix.
 
-- **Grand Average:** A population-level analysis is performed by aligning and averaging the ERD maps of all subjects to identify common neurophysiological patterns.
+- **Grand Average:** A population-level analysis is performed by aligning and averaging the ERD curves of all subjects to identify common neurophysiological patterns. Three topoplot images are also created representing the avg feet ERD, hands ERD and Fisher score
 
 ## Configuration
 
@@ -117,15 +119,3 @@ All global parameters are centralised in `src/get_config.m`. You can modify this
 - Spectrogram window settings.
 - Number of features to select.
 - Channel mapping and event codes.
-
-## Contributors
-
-The contributions of each group member are listed below:
-
-- **Baggio Davide:**
-
-- **Brigandì Michele:**
-
-- **Campigotto Francesco:**
-
-- **Wei Yupeng:**

@@ -27,9 +27,6 @@ function organize_dataset(source_dir, output_root_dir)
     if ~exist(output_root_dir, 'dir')
         mkdir(output_root_dir);
     end
-
-    %% File Discovery
-    fprintf('[organize_dataset] Scanning for GDF files in: %s ...\n', source_dir);
     
     % Recursively find all .gdf files
     all_files = dir(fullfile(source_dir, '**', '*.gdf'));
@@ -78,7 +75,6 @@ function organize_dataset(source_dir, output_root_dir)
         % Copy file
         if ~exist(target_path, 'file')
             copyfile(full_source_path, target_path);
-            fprintf('[organize_dataset] [%s] [%s] Copied: %s\n', subject_id, upper(run_type), filename);
             count_files = count_files + 1;
         end
     end

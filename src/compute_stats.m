@@ -24,7 +24,7 @@ function stats = compute_stats(prep_out_path, cfg)
     end
     
     % Find Channel Indices dynamically (Robust against channel reordering)
-    % We need C3 (Hands ROI), Cz (Feet ROI), and C4 (Lateralization)
+    % We need C3 - C4 (Both Hands ROI), Cz (Feet ROI)
     idx_c3 = find(strcmpi(chanlabs, 'C3'), 1);
     idx_cz = find(strcmpi(chanlabs, 'Cz'), 1);
     idx_c4 = find(strcmpi(chanlabs, 'C4'), 1);
@@ -74,7 +74,8 @@ function stats = compute_stats(prep_out_path, cfg)
     v1 = var(X(idx_hands, :), 0, 1, 'omitnan'); 
     v2 = var(X(idx_feet, :), 0, 1, 'omitnan');
     
-    fs_vector = (m1 - m2).^2 ./ (v1 + v2 + 1e-10);
+    % squared of std feature score
+    fs_vector = (m1 - m2).^2 ./ (v1 + v2);
     
     %% 6. Statistics & Lateralization
     [max_fs, best_idx] = max(fs_vector);

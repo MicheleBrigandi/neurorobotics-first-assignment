@@ -1,5 +1,5 @@
-function process_and_concatenate_integrated(raw_dir, subj_id, run_type, prep_out_path, cfg)
-% PROCESS_AND_CONCATENATE_INTEGRATED 
+function preprocessing(raw_dir, subj_id, run_type, prep_out_path, cfg)
+% PREPROCESSING 
 % Integrated pipeline: GDF -> MAT -> PSD -> Extracted Trials.
 % 
 % Replaces manual processing with calls to modular functions:
@@ -36,17 +36,12 @@ function process_and_concatenate_integrated(raw_dir, subj_id, run_type, prep_out
     
     try
         % 1. Convert GDF to MAT
-        %fprintf('[process] Step 1: Converting GDF to MAT...\n');
         convert_gdf2mat(gdf_source_dir, temp_mat_dir);
 
         % 2. Compute PSD
-        %fprintf('[process] Step 2: Computing PSD...\n');
-        % compute_psd(input_dir, output_dir, laplacian_path, cfg)
         compute_psd(temp_mat_dir, temp_psd_dir, cfg.files.laplacian, cfg);
 
         % 3. Extract Trials
-        %fprintf('[process] Step 3: Extracting Trials...\n');
-        % extract_trials(input_dir, output_filepath, cfg)
         extract_trials(temp_psd_dir, prep_out_path, cfg);
 
     catch ME
@@ -56,10 +51,7 @@ function process_and_concatenate_integrated(raw_dir, subj_id, run_type, prep_out
     end
     
     % Cleanup
-    fprintf('[process] Cleaning up temporary files...\n');
     if exist(temp_mat_dir, 'dir'), rmdir(temp_mat_dir, 's'); end
     if exist(temp_psd_dir, 'dir'), rmdir(temp_psd_dir, 's'); end
-    
-    fprintf('[process] Processing complete. Result saved to: %s\n', prep_out_path);
 
 end

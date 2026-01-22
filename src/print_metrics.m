@@ -28,5 +28,5 @@ function print_metrics(all_stats, selected_indices)
                 clean_id, s.maxFS, s.meanFS, s.peakERD, s.LI, best_feat);
     end
     fprintf('%s\n', repmat('-', 1, 70));
-    fprintf('Note: FS = Fisher Score, ERD = Peak Log-ratio at cue phase.\n\n');
+    fprintf('Note: FS = Fisher Score (squared), ERD = Peak Log-ratio at cue phase.\n\n');
 end

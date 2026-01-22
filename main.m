@@ -52,7 +52,7 @@ DO_TESTING      = true;  % Test on online data
 
 %% 0. SETUP
 if DO_SETUP
-    fprintf('\n=== PHASE 0: DATASET ORGANISATION ===\n');
+    fprintf('\n=== DATASET ORGANISATION ===\n');
     if exist(cfg.paths.downloads, 'dir')
         organize_dataset(cfg.paths.downloads, fullfile(cfg.paths.data, 'raw'));
     else
@@ -98,8 +98,8 @@ for s = 1:length(subjects)
 
     % --- 1. PREPROCESSING (Offline & Online) ---
     if DO_PREPROC
-        process_and_concatenate_integrated(subj_raw_dir, subj_id, 'offline', file_act_off, cfg);
-        process_and_concatenate_integrated(subj_raw_dir, subj_id, 'online', file_act_on, cfg);
+        preprocessing(subj_raw_dir, subj_id, 'offline', file_act_off, cfg);
+        preprocessing(subj_raw_dir, subj_id, 'online', file_act_on, cfg);
     end
 
     % --- 2. FEATURE ANALYSIS & STATS ---
