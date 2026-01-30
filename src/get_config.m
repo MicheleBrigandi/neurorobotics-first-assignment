@@ -63,7 +63,7 @@ function cfg = get_config()
     cfg.spec.freq_band = [4 48];
     
     % Standard Frequency Bands (Centralized Definition)
-    cfg.bands.mu   = [8 13];
+    cfg.bands.mu   = [8 12];
     
     %% EVENT CODES (GDF Standard)
     % Hex codes converted to decimal

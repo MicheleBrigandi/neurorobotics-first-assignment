@@ -31,7 +31,7 @@ function analyze_eeg(activity_path, output_dir, cfg)
     
     %% Band Power Integration
     
-    mu_band   = [8 13];
+    mu_band   = [8 12];
     beta_band = [13 30];
     
     % Find frequency indices

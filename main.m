@@ -2,9 +2,12 @@
 %  BCI PIPELINE: MOTOR IMAGERY CLASSIFICATION (UNIFIED COMPACT MAIN)
 %  ========================================================================
 %  
-%  This script combines the clean, single-loop structure of the original
-%  Project A with the advanced modular functions and population analysis
-%  of Project B.
+%  This script implements the complete analysis pipeline for the Neurorobotics
+%  Assignment 1. It processes EEG data to classify Motor Imagery tasks 
+%  (Both Hands vs. Both Feet) using a Linear Discriminant Analysis (LDA) 
+%  classifier. The pipeline covers data organisation, signal preprocessing 
+%  (Laplacian, Spectrogram), feature selection (Fisher Score), offline 
+%  calibration, and online evaluation with Evidence Accumulation.
 %
 %  STRUCTURE:
 %    0. SETUP: Automatic dataset organisation
@@ -25,14 +28,7 @@ clear; clc; close all;
 
 % Add source and data directories
 addpath(genpath('src')); 
-addpath(genpath('data')); 
-
-% Optional: Add EEGLAB if available (for topoplots)
-% Adjust this path if necessary or keep it generic
-eeglab_path = 'C:\Users\Utente\Desktop\neurorobotics\toolboxes\eeglab';
-if exist(eeglab_path, 'dir')
-    addpath(genpath(eeglab_path));
-end
+addpath(genpath('data'));
 
 % Load Configuration
 if exist('get_config', 'file')
@@ -44,11 +40,11 @@ end
 fprintf('=== BCI PIPELINE INITIALISED ===\n');
 
 %% CONTROL FLAGS
-DO_SETUP        = true;  % Organize raw files
-DO_PREPROC      = true;  % Convert and extract trials
-DO_ANALYSIS     = true;  % Compute stats & visualization
-DO_TRAINING     = true;  % Train LDA model
-DO_TESTING      = true;  % Test on online data
+DO_SETUP    = true;  % Organize raw files
+DO_PREPROC  = true;  % Convert and extract trials
+DO_ANALYSIS = true;  % Compute stats & visualization
+DO_TRAINING = true;  % Train LDA model
+DO_TESTING  = true;  % Test on online data
 
 %% 0. SETUP
 if DO_SETUP

@@ -17,11 +17,11 @@ function stats = compute_stats(prep_out_path, cfg)
     [n_TIME, n_FREQ, n_CHAN, n_TRIALS] = size(Activity);
 
     %% 1. Dynamic Parameter Lookup
-    % Define standard bands from config (fallback to 8-13 if missing)
+    % Define standard bands from config (fallback to 8-12 if missing)
     if isfield(cfg, 'bands') && isfield(cfg.bands, 'mu')
         mu_range = cfg.bands.mu;
     else
-        mu_range = [8 13];
+        mu_range = [8 12];
     end
     
     % Find Channel Indices dynamically (Robust against channel reordering)

@@ -12,32 +12,33 @@ The project is organised into a modular structure to ensure flexibility and main
 
 ```bash
 /
-├── main.m                                   # Entry point of the pipeline. Orchestrates all phases.
-├── src/                                     # Source code for all processing functions.
-│   ├── organize_dataset.m                   # Sorts raw GDF files into Subject/Run-type folders.
-│   ├── convert_gdf2mat.m                    # Converts GDF files to MATLAB format.
-│   ├── compute_psd.m                        # Computes Power Spectral Density (PSD) and Spectrograms.
-│   ├── compute_stats.m                      # Computes ERD, Fisher score and Lateralization
-│   ├── extract_trials.m                     # Segments full trials (Fixation to Feedback).
-│   ├── select_features.m                    # Feature selection using Fisher Score.
-│   ├── train_classifier.m                   # Trains the LDA classifier on offline data.
-│   ├── test_classifier.m                    # Evaluates the model on online data (Evidence Accumulation).
-│   ├── visualize_erd_ers.m                  # Generates Time-Frequency maps for single subjects.
-│   ├── analyze_eeg.m                        # Computes global band power (Mu/Beta) per channel.
-│   ├── print_metrics.m                      # Prints the Grand Average metrics.
-│   ├── preprocessing.m                      # Extracts trials and compute the 4D activity matrix.
-│   ├── visualize_features.m                 # Generate images of the preprocessed data.
-│   └── get_config.m                         # Centralised configuration (paths, constants, parameters).
-├── data/                                    # Data storage (excluded from version control).
-│   ├── downloads/                           # Place raw GDF files here.
-│   ├── raw/                                 # Automatically structured raw data.
-│   └── preprocessed/                        # Intermediate Activity matrices.
-└── results/                                 # Output figures, trained models, and evaluation metrics.
+├── main.m                         # Entry point of the pipeline. Orchestrates all phases.
+├── src/                           # Source code for all processing functions.
+│   ├── organize_dataset.m         # Sorts raw GDF files into Subject/Run-type folders.
+│   ├── convert_gdf2mat.m          # Converts GDF files to MATLAB format.
+│   ├── compute_psd.m              # Computes Power Spectral Density (PSD) and Spectrograms.
+│   ├── compute_stats.m            # Computes ERD, Fisher score and Lateralization
+│   ├── extract_trials.m           # Segments full trials (Fixation to Feedback).
+│   ├── select_features.m          # Feature selection using Fisher Score.
+│   ├── train_classifier.m         # Trains the LDA classifier on offline data.
+│   ├── test_classifier.m          # Evaluates the model on online data (Evidence Accumulation).
+│   ├── visualize_erd_ers.m        # Generates Time-Frequency maps for single subjects.
+│   ├── analyze_eeg.m              # Computes global band power (Mu/Beta) per channel.
+│   ├── print_metrics.m            # Prints the Grand Average metrics.
+│   ├── preprocessing.m            # Extracts trials and compute the 4D activity matrix.
+│   ├── visualize_features.m       # Generate images of the preprocessed data.
+│   └── get_config.m               # Centralised configuration (paths, constants, parameters).
+├── data/                          # Data storage (excluded from version control).
+│   ├── downloads/                 # Place raw GDF files here.
+│   ├── raw/                       # Automatically structured raw data.
+│   └── preprocessed/              # Intermediate Activity matrices.
+└── results/                       # Output figures, trained models, and evaluation metrics.
 ```
 
 ## Prerequisites
 
-**BioSig Toolbox:** Required for reading GDF files (sload function). Please ensure BioSig is installed and added to your MATLAB path.
+**BioSig Toolbox:** Required for reading GDF files (`sload` function). Please ensure BioSig is installed and added to your MATLAB path.
+**EEGLAB:** Required for generating topographic plots (`topoplot` function). Please ensure it is installed and added to your MATLAB path.
 
 ## Installation and Setup
 
@@ -50,6 +51,8 @@ The project is organised into a modular structure to ensure flexibility and main
 
 3. **Configure BioSig:** Ensure the BioSig toolbox is in your MATLAB path to allow GDF reading.
 
+4. **Configure EEGLAB:** Ensure the EEGLAB toolbox is in your MATLAB path to allow topographic plotting.
+
 ## Usage
 
 The entire analysis is controlled via the `main.m` script. We have implemented a flag-based system to selectively run specific parts of the pipeline without re-computing previous steps.
@@ -60,12 +63,11 @@ The entire analysis is controlled via the `main.m` script. We have implemented a
 
    ```Matlab
    %% CONTROL FLAGS
-   DO_DATA_SETUP       = true; % Automatic organisation of raw GDF files into subject folders
-   DO_PREPROCESSING    = true; % GDF -> MAT conversion, Laplacian, PSD, Trial Extraction
-   DO_FEATURE_ANALYSIS = true; % ERD and Fisher score are computed
-   DO_TRAINING         = true; % Feature Selection (Fisher Score) & Model Training (LDA)
-   DO_TESTING          = true; % Online Testing with Evidence Accumulation
-   DO_VISUALIZATION    = true; % ERD/ERS Maps and Global Power Analysis (Single Subject)
+   DO_SETUP    = true;  % Organize raw files
+   DO_PREPROC  = true;  % Convert and extract trials
+   DO_ANALYSIS = true;  % Compute stats & visualization
+   DO_TRAINING = true;  % Train LDA model
+   DO_TESTING  = true;  % Test on online data
    ```
 
 3. Run the script.
