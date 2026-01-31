@@ -106,7 +106,7 @@ The trained model is tested on the online runs. We implemented an **Evidence Acc
 - **Single Subject:**
 
   - **ERD/ERS Maps:** Time-Frequency maps are generated for C3, Cz, and C4 to analyse the desynchronisation in the Mu/Beta bands.
-  - **Global Band Power:** A global spectral analysis is computed to visualise the power distribution across all channels, identifying the regions with the strongest activity in the Mu (8-13 Hz) and Beta (13-30 Hz) bands.
+  - **Global Band Power:** A global spectral analysis is computed to visualise the power distribution across all channels, identifying the regions with the strongest activity in the Mu (8-12 Hz) and Beta (13-30 Hz) bands.
   - **Topoplot:** Topoplot visualization of both hands ERD, feet ERD, and Fisher score
   - **Spectrogram:** Spectrogram of the fisher score results.
   - **Training Results:** Training accuracy bars and training confusion matrix.
